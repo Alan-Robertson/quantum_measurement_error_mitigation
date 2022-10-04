@@ -340,55 +340,6 @@ class TensorPatchFitter():
         def apply(self, measurement_results):
             pass
 
-################
-
-        # # Join local patches into a full calibration matrix
-        # for i in range(self.n_qubits):
-        #     for pat in mit_patterns:
-
-        #         pair = mit_patterns[pat]
-        #         pair_approx = qubit_pair_fitters[pat]
-
-        #         expanded_approx = scipy.sparse.kron(pair_approx, scipy.sparse.eye(2 ** (n_qubits - len(pair))))
-        #         expanded_approx = Qobj(expanded_approx, dims=f_dims(self.n_qubits))
-
-        #         # Construct ordering for permutation
-        #         # First n elements of the expanded approximation are non-identity and need to be correctly swapped
-        #         # Last k elements are all the identity and may be freely interchanged
-        #         order = []
-        #         order_count = len(pair)
-        #         pair_count = 0
-        #         for i in range(self.n_qubits):
-        #             if i in pair:
-        #                 order.append(pair_count)
-        #                 pair_count += 1
-        #             else:
-        #                 order.append(order_count)
-        #                 order_count += 1
-
-        #         # Apply permutation
-        #         expanded_approx = expanded_approx.permute(order)._data.tocsc()
-        #         qubit_pair_fitters[pat] = expanded_approx
-
-        #         self._cal_matrices = qubit_pair_fitters
-
-        # # Probably can crop here
-        # # Base calibration matrix
-        # cal_matrix = np.eye(2 ** self.n_qubits)
-        # for pat in mit_patterns:
-        #     cal_matrix = qubit_pair_fitters[pat] @ cal_matrix
-        
-        # cal_matrix = np.real(cal_matrix)
-            
-        # # Build new cal matrix object:
-        # state_labels = [str(bin(i)[2:]).zfill(self.n_qubits) for i in range(2 ** self.n_qubits)]
-        # fitter = CompleteMeasFitter(results=None, state_labels=state_labels)
-        
-        # # Set the corresponding objects appropriately
-        # fitter._tens_fitt.cal_matrices = [cal_matrix]
-        # return fitter
-
-################
 
 def composite_filter(circuit, probs=None, n_shots=1000, n_qubits=4, **kwargs):
     '''
