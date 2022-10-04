@@ -17,19 +17,22 @@ class GraphNode():
             self.adjacent_nodes=set(adjacent_nodes)
 
         self.visited = False
-        self.label=label
+        self.label = label
+        self.n_edges = 0
 
     def add_edge(self, graph_node):
         '''
             Ads an edge to the Node
         '''
         self.adjacent_nodes.add(graph_node)
+        self.n_edges += 1
 
     def __repr__(self):
         '''
         repr for the node, returns the node's label
         '''
         return str(self.label)
+
 
 class CouplingMapGraph():
     '''
@@ -40,8 +43,11 @@ class CouplingMapGraph():
         if len(coupling_map) < 1:
             raise Exception("Empty Coupling Map")
 
-        self.coupling_map = coupling_map
-        self.graph = self.coupling_map_to_graph(coupling_map)
+        # Clear duplicates from the coupling_map
+        self.coupling_map = []
+        self.cmap_no_duplicate_edges(coupling_map)
+
+        self.graph = self.coupling_map_to_graph(self.coupling_map)
 
     def __call__(self, *args, **kwargs) -> list:
         return self.edge_patches(*args, **kwargs)
@@ -49,9 +55,26 @@ class CouplingMapGraph():
     def __repr__(self):
         return str(self.coupling_map)
 
-    def edge_patches(self, edges=None, distance=2) -> list:
+    def __getitem__(self, i):
+        return self.graph.__getitem__(i)
+
+    def __setitem__(self, i):
+        return self.graph.__setitem__(i)
+
+    def cmap_no_duplicate_edges(self, coupling_map):
         '''
-            Constructs the edge patch measurements
+            Culls duplicate edges from the coupling map
+            Before saving the new culled map to the class's instance
+            of the coupling map
+        '''
+        for edge in coupling_map:
+            if edge not in self.coupling_map and edge[::-1] not in self.coupling_map:
+                self.coupling_map.append(edge)
+
+
+    def edge_patches(self, edges=None, distance=2, participating_qubits=None) -> list:
+        '''
+            Constructs the edge measurement patches 
         '''
         if edges is None:
             edges = self.coupling_map
