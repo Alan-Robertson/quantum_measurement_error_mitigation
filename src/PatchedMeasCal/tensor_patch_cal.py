@@ -1,5 +1,6 @@
 import random
 import math
+import copy
 
 from typing import List, Union
 from functools import reduce, partial
@@ -15,7 +16,7 @@ from qiskit import QuantumCircuit, execute, Aer, QuantumCircuit
 from qiskit.ignis.mitigation.measurement import complete_meas_cal, tensored_meas_cal, CompleteMeasFitter, TensoredMeasFitter
 
 from PatchedMeasCal.edge_bfs import CouplingMapGraph
-from PatchedMeasCal.utils import f_dims, normalise
+from PatchedMeasCal.utils import f_dims, normalise, vProgressbar, vprint, vtick
 
 class CalibrationMatrix():
     def __init__(self, calibration_matrix, edge=None):
@@ -51,9 +52,11 @@ class TensorPatchFitter():
         else:
             self.coupling_map = coupling_map
 
+        self._coupling_graph = None
+
         self._edge_matrices = None
         self._patch_matrices = None
-        self._coupling_graph = None
+        self._meas_fitter = None
 
         self.n_qubits = len(self.backend.properties().qubits)
         self.n_shots = n_shots
@@ -66,13 +69,13 @@ class TensorPatchFitter():
         """
             Return cal_matrices
         """
-        return self._cal_matrices
+        return self._meas_fitter
 
     def edge_to_int(self, edge):
         # Converts coupling map tuples to integers
         return edge[0] * self.n_qubits + edge[1]
   
-    def build(self, probs=None, n_shots=None, assert_accuracy=False, shots_fixed=True):
+    def build(self, probs=None, n_shots=None, assert_accuracy=False, shots_fixed=True, verbose=False):
         '''
         Build a composite map fitter given a backend and a coupling map
 
@@ -83,103 +86,27 @@ class TensorPatchFitter():
         :: assert_accuracy :: Check accuracy of approximation
 
         Returns a composite map calibration filter
+        TODO Setup for build once, rebuild meas_fit for circs
         '''
         if n_shots is None:
             n_shots = self.n_shots
 
+        vprint(verbose, "Building Coupling Graph")
         self._coupling_graph = CouplingMapGraph(self.coupling_map)
+        self._coupling_map = self._coupling_graph.coupling_map
 
         # Create collection of fitters from mit_patterns
-        self._edge_matrices = self.construct_edge_calibrations(n_shots=n_shots, probs=probs)
+        vprint(verbose, "Building Edge Calibrations")
+        self._edge_matrices = self.build_edge_calibrations(n_shots=n_shots, probs=probs, verbose=verbose)
 
         # Participating qubits will have already been factored into the previous graph construction
-        self._patch_matrices = self.construct_patch_calibrations()
+        vprint(verbose, "Building Patch Calibrations")
+        self._patch_matrices = self.build_patch_calibrations(verbose=verbose)
 
+        vprint(verbose, "Building Measure Fitter")
+        self._meas_fitter = self.build_meas_fitter(verbose=verbose)
 
-    def construct_patch_calibrations(self, participating_qubits=None):
-        # TODO: Participating qubits
-        #patches = self._coupling_graph.edge_patches(participating_qubits=participating_qubits)
-        # We do this sparsely to account for hypothetical patches of larger size
-        patch_matrices = [] 
-
-        for qubit in range(self.n_qubits):
-            num_participants = self._coupling_graph[qubit].n_edges
-
-            # TODO: Modify for general construction beyond pairs
-            participant_num = 0 # Order of construction
-            for edge_matrix in self._edge_matrices:
-                # If this calibration matrix contains our target qubit
-                if qubit in edge_matrix:
-                    # Get the index of the qubit within the edge
-                    position = edge_matrix.edge.index(qubit)
-
-                    # Create sparse representation as a coo matrix within Qutip
-                    cal_matrix = qutip.Qobj(
-                        scipy.sparse.coo_matrix(
-                            edge_matrix.calibration_matrix
-                            ),
-                        dims=f_dims(edge_matrix.n_edge_qubits)
-                        )
-
-                    # Take the partial trace for the single qubit approximation
-                    single_qubit_approx = normalise(
-                        np.array(
-                            cal_matrix.ptrace(position)
-                        )
-                    )
-
-                    # Construct left and right approximations
-                    mean_approx_l = scipy.linalg.fractional_matrix_power(
-                        single_qubit_approx,
-                        (num_participants - 1 - participant_num) / num_participants
-                    )
-                    mean_approx_r = scipy.linalg.fractional_matrix_power(
-                        single_qubit_approx,
-                        participant_num / num_participants
-                    )
-
-                    # Expand and set to the correct terms, currently in order [a, b, I, I, I ...]
-                    sparse_eye = scipy.sparse.eye(2 ** (edge_matrix.n_edge_qubits - 1))
-                    expanded_approx_l = scipy.sparse.coo_matrix(mean_approx_l).tocsr()
-                    expanded_approx_l = scipy.sparse.kron(expanded_approx_l, sparse_eye)
-                    expanded_approx_l = qutip.Qobj(expanded_approx_l, dims=f_dims(edge_matrix.n_edge_qubits))
-
-                    expanded_approx_r = scipy.sparse.coo_matrix(mean_approx_r).tocsr()
-                    expanded_approx_r = scipy.sparse.kron(expanded_approx_r, sparse_eye)
-                    expanded_approx_r = qutip.Qobj(expanded_approx_r, dims=f_dims(edge_matrix.n_edge_qubits))
-
-                    # Construct permutation order
-                    order = list(range(edge_matrix.n_edge_qubits))
-                    order[position] = 0
-                    order[0] = position
-
-                    # Permute to correct order and retrieve sparse matrices
-                    # CSC format is better for taking inv in the next step
-                    expanded_approx_l = expanded_approx_l.permute(order)._data.tocsc()
-                    expanded_approx_r = expanded_approx_r.permute(order)._data.tocsc()
-
-                    # Invert
-                    expanded_approx_l = scipy.sparse.linalg.inv(expanded_approx_l)
-                    expanded_approx_r = scipy.sparse.linalg.inv(expanded_approx_r)
-
-                    # Sparse rep of the calibration matrix
-                    sparse_cal_matrix = scipy.sparse.csc_matrix(edge_matrix.calibration_matrix)
-
-                    # All three objects are sparse, so the output is sparse
-                    # This saves time later
-                    patch_matrices.append(
-                            CalibrationMatrix(
-                              expanded_approx_l 
-                            @ sparse_cal_matrix
-                            @ expanded_approx_r,
-                            edge=edge_matrix.edge
-                            )
-                        )
-                    participant_num += 1
-
-        return patch_matrices
-
-    def construct_edge_calibrations(self, n_shots, probs=None):
+    def build_edge_calibrations(self, n_shots, verbose=True, probs=None):
         '''
             Builds calibrations for each edge via patching
         '''
@@ -187,9 +114,6 @@ class TensorPatchFitter():
         # These will also need to be sparse
         if probs is not None:
                 pair_probs = np.array(probs)[:4, :4]
-
-        # Build a register for calibrations
-        qr = qiskit.QuantumRegister(self.n_qubits)
 
         # Fix our qubit layout
         # We will only be using adjacent edges so all operations should be legal
@@ -199,23 +123,28 @@ class TensorPatchFitter():
         # Execute calibration circuits independently
         # Simultaneous execution may exceed the maximum number of jobs, should implement a local job manager
         # at some point
-        patches = self._coupling_graph.edge_patches()
-        calibration_circs = self.construct_calibration_circuits(patches)
+        vprint(verbose, "\tBuilding Calibration Circuits")
+        patches = self._coupling_graph.edge_patches(verbose=verbose)
+        calibration_circs = self.construct_calibration_circuits(patches, verbose=verbose)
         transpiled_circs = qiskit.transpile(
             calibration_circs, 
             backend=self.backend, 
             initial_layout=initial_layout, 
-            optimization_level=0) 
+            optimization_level=0
+            ) 
 
+        vprint(verbose, "\tExecuting Calibration Circuits")
         calibration_results = execute(
             transpiled_circs,
             self.backend,
             shots=n_shots,
-            initial_layout=initial_layout).result()
+            initial_layout=initial_layout
+            ).result()
 
         # Group calibration results in sets of four 
         # This will need to be modified for larger patch sizes, but for now we assume d=2
         calibration_counts = []
+        vprint(verbose, "\tDe-hexing Measurement Results")
         for patch, patch_result in zip(patches, zip(*[iter(calibration_results.results)] * 4)):
             patch_results = []
             for result in patch_result:
@@ -229,7 +158,7 @@ class TensorPatchFitter():
                 patch_results.append(bin_counts)
             calibration_counts.append(patch_results)
 
-        calibration_matrices = self.partial_calibration(patches, calibration_counts, n_shots=n_shots)
+        calibration_matrices = self.partial_calibration(patches, calibration_counts, n_shots=n_shots, verbose=verbose)
 
         edge_matrices = []
         for patch, matrices in zip(patches, calibration_matrices):
@@ -238,14 +167,98 @@ class TensorPatchFitter():
 
         return edge_matrices
 
-    def construct_calibration_circuits(self, patches):
+
+    def build_patch_calibrations(self, participating_qubits=None, verbose=False):
+        # TODO: Participating qubits
+        # We do this sparsely to account for hypothetical patches of larger size
+        patch_matrices = copy.deepcopy(self._edge_matrices) 
+
+        pb = vProgressbar(verbose, 20, self.n_qubits, "\tMerging Patches")
+        for qubit in range(self.n_qubits):
+            vtick(verbose, pb)
+            num_participants = self._coupling_graph[qubit].n_edges
+
+            # TODO: Modify for general construction beyond pairs
+            participant_num = 0 # Order of construction
+            for index, patch_matrix in enumerate(patch_matrices):
+                # If this calibration matrix contains our target qubit
+                if qubit in patch_matrix:
+                    # Get the index of the qubit within the edge
+                    position = patch_matrix.edge.index(qubit)
+
+                    # Create sparse representation as a coo matrix within Qutip
+                    cal_matrix = qutip.Qobj(
+                        scipy.sparse.coo_matrix(
+                            patch_matrix.calibration_matrix
+                            ),
+                        dims=f_dims(patch_matrix.n_edge_qubits)
+                        )
+
+                    # Take the partial trace for the single qubit approximation
+                    single_qubit_approx = normalise(
+                        np.array(
+                            cal_matrix.ptrace(position)
+                        )
+                    )
+
+                    # Construct left and right approximations
+                    mean_approx_l = scipy.linalg.fractional_matrix_power(
+                        single_qubit_approx,
+                        (num_participants - 1 - participant_num) / num_participants
+                    ).real
+                    mean_approx_r = scipy.linalg.fractional_matrix_power(
+                        single_qubit_approx,
+                        participant_num / num_participants
+                    ).real
+
+                    # Expand and set to the correct terms, currently in order [a, b, I, I, I ...]
+                    sparse_eye = scipy.sparse.eye(2 ** (patch_matrix.n_edge_qubits - 1))
+                    expanded_approx_l = scipy.sparse.coo_matrix(mean_approx_l).tocsr()
+                    expanded_approx_l = scipy.sparse.kron(expanded_approx_l, sparse_eye)
+                    expanded_approx_l = qutip.Qobj(expanded_approx_l, dims=f_dims(patch_matrix.n_edge_qubits))
+
+                    expanded_approx_r = scipy.sparse.coo_matrix(mean_approx_r).tocsr()
+                    expanded_approx_r = scipy.sparse.kron(expanded_approx_r, sparse_eye)
+                    expanded_approx_r = qutip.Qobj(expanded_approx_r, dims=f_dims(patch_matrix.n_edge_qubits))
+
+                    # Construct permutation order
+                    order = list(range(patch_matrix.n_edge_qubits))
+                    order[position] = 0
+                    order[0] = position
+
+                    # Permute to correct order and retrieve sparse matrices
+                    # CSC format is better for taking inv in the next step
+                    expanded_approx_l = expanded_approx_l.permute(order)._data.tocsc()
+                    expanded_approx_r = expanded_approx_r.permute(order)._data.tocsc()
+
+                    # Invert
+                    expanded_approx_l = scipy.sparse.linalg.inv(expanded_approx_l).real
+                    expanded_approx_r = scipy.sparse.linalg.inv(expanded_approx_r).real
+
+                    # Sparse rep of the calibration matrix
+                    sparse_cal_matrix = scipy.sparse.csc_matrix(patch_matrix.calibration_matrix)
+
+                    # All three objects are sparse, so the output is sparse
+                    # This saves time later
+                    patch_matrices[index] = CalibrationMatrix(
+                            scipy.sparse.csc_matrix(
+                                    expanded_approx_l @ sparse_cal_matrix @ expanded_approx_r
+                                ),
+                            edge=patch_matrix.edge
+                            )
+                    participant_num += 1
+
+        return patch_matrices
+
+    def construct_calibration_circuits(self, patches, verbose=False):
         '''
             Builds calibration circuits from patches
         '''
         circs = []
+        pb = vProgressbar(verbose, 20, len(patches), "\tConstructing Calibration Circuits")
         for patch in patches:
+            vtick(verbose, pb)
             calibration_circuits = [qiskit.QuantumCircuit(self.n_qubits, 2 * len(patch)) for _ in range(4)]
-
             # Four measurement calibration circuits: 00, 01, 10, 11
             for i in range(4):
                     if i == 1:
@@ -263,23 +276,27 @@ class TensorPatchFitter():
             circs += calibration_circuits
         return circs
 
-    def build_meas_fitter(self, participating_qubits=None):
+    def build_meas_fitter(self, participating_qubits=None, verbose=False, inv_cal=True):
         # Join local patches into a sparse calibration matrix
         # TODO non-complete sets of qubits
         meas_fitter = []
         # Reverse order of patch matrices
+        pb = vProgressbar(verbose, 20, len(self._patch_matrices), "\tBuilding Meas Fitters from Patches")
         for patch_matrix in self._patch_matrices[::-1]:
+            vtick(verbose, pb)
             
             # Invert each patch matrix
-            inv_matrix = scipy.sparse.linalg.inv(patch_matrix.calibration_matrix)
+            if inv_cal:
+                inv_matrix = scipy.sparse.linalg.inv(patch_matrix.calibration_matrix).real
+            else:
+                inv_matrix = patch_matrix.calibration_matrix.real
 
             # Convert to sparse qutip object 
             expanded_approx = scipy.sparse.kron(
                 inv_matrix,
                 scipy.sparse.eye(
-                    2 ** (self.n_qubits - patch_matrix.n_edge_qubits
-                        )
-                    )
+                    2 ** (self.n_qubits - patch_matrix.n_edge_qubits),
+                    dtype=np.float64)
                 )
             expanded_approx = qutip.Qobj(expanded_approx, dims=f_dims(self.n_qubits))
 
@@ -298,12 +315,12 @@ class TensorPatchFitter():
                     order_count += 1
 
             # Permute the order of the tensor
-            expanded_approx = expanded_approx.permute(order)._data.tocsc()
+            expanded_approx = expanded_approx.permute(order)._data.tocsc().real
             meas_fitter.append(CalibrationMatrix(expanded_approx, edge=patch_matrix.edge))
         return meas_fitter
 
     @staticmethod
-    def partial_calibration(patches, calibration_results, n_shots=None):
+    def partial_calibration(patches, calibration_results, n_shots=None, verbose=False):
         '''
             Reconstruct individual calibration matricies from the joint patch matrices
         '''
@@ -311,18 +328,20 @@ class TensorPatchFitter():
             n_shots = self.n_shots
 
         cal_matrices = []
+        pb = vProgressbar(verbose, 20, len(patches), "\tTracing Patched Calibration Results")
         for patch, calibration_result in zip(patches, calibration_results):
+            vtick(verbose, pb)
             # Construct calibration matrix for each edge in the patch
             patch_calibration_matrices = []
 
             # Construct calibration matrix for each edge in the patch
             for i, edge in enumerate(patch):
-                cal_matrix = np.zeros((4, 4), dtype=np.float32)
+                cal_matrix = np.zeros((4, 4), dtype=np.float64)
 
                 # Calibration matrix for one edge
                 # i represents 00, 01, 10 and 11 circuits
                 for j, result in enumerate(calibration_result):
-                    cal_vec = np.zeros(4, dtype=np.float32)
+                    cal_vec = np.zeros(4, dtype=np.float64)
 
                     # Partial trace over the rest of the distribution
                     # There are probably speedups here
@@ -337,8 +356,41 @@ class TensorPatchFitter():
             cal_matrices.append(patch_calibration_matrices[::-1])
         return cal_matrices
 
-        def apply(self, measurement_results):
-            pass
+    def apply(self, measurement_results, verbose=False):
+        # Todo; subset of qubits
+
+        # These should be no more than the number of shots in size
+        # Assumes correct mapping of qubits to vals
+        rows = list(map(lambda x: int(x[::-1], 2), measurement_results.keys()))
+        cols = [0] * len(measurement_results)
+        values = list(measurement_results.values())
+        n_shots = sum(values)
+
+        results_vec = scipy.sparse.csc_array((values, (rows, cols)), shape=(2 ** self.n_qubits, 1))
+
+        pb = vProgressbar(verbose, 20, len(self._meas_fitter), "Applying Meas Fitters")
+        for meas_fit in self._meas_fitter[::-1]:
+            vtick(verbose, pb)
+            results_vec = meas_fit.calibration_matrix @ results_vec
+
+
+        results_arr = results_vec.toarray()
+        shot_results = {}
+        for i, res in enumerate(results_arr):
+            if res > 0:
+                string = bin(i)[2:].zfill(self.n_qubits)[::-1] # To get back to qiskit's insane reversed strings
+                shot_results[string] = res[0]
+        return shot_results
+
+    def apply_meas_fitter(self, measurement_results, verbose=True):
+        state_labels = self.state_labels(self.n_qubits)
+        m_fitters = [CompleteMeasFitter(None, state_labels) for _ in self.meas_fit]
+
+        # Convert back to dictionary
+
+    @staticmethod
+    def state_labels(n_qubits):
+        return list(map(lambda x: bin(x)[2:], range(2 ** n_qubits)))
 
 
 def composite_filter(circuit, probs=None, n_shots=1000, n_qubits=4, **kwargs):

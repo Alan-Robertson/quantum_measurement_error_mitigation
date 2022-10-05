@@ -4,6 +4,7 @@
      coupling map and a set of edges
 '''
 import copy
+from PatchedMeasCal.utils import Progressbar, vprint, vProgressbar, vtick
 
 class GraphNode():
     '''
@@ -46,7 +47,6 @@ class CouplingMapGraph():
         # Clear duplicates from the coupling_map
         self.coupling_map = []
         self.cmap_no_duplicate_edges(coupling_map)
-
         self.graph = self.coupling_map_to_graph(self.coupling_map)
 
     def __call__(self, *args, **kwargs) -> list:
@@ -72,7 +72,7 @@ class CouplingMapGraph():
                 self.coupling_map.append(edge)
 
 
-    def edge_patches(self, edges=None, distance=2, participating_qubits=None) -> list:
+    def edge_patches(self, edges=None, distance=2, participating_qubits=None, verbose=False) -> list:
         '''
             Constructs the edge measurement patches 
         '''
@@ -82,9 +82,14 @@ class CouplingMapGraph():
         patches = []
         patched_edges = copy.deepcopy(edges)
 
+        pb = vProgressbar(verbose, 20, len(edges), "\tBuilding Edge Patches")
         while len(patched_edges) > 0:
             for node in self.graph:
                 node.visited = False
+
+            if pb is not None:
+                pb.invoked = len(edges) - len(patched_edges)
+            vtick(verbose, pb)
 
             # Pick an initial edge
             initial_edge = patched_edges[0]

@@ -3,7 +3,8 @@ import unittest as pyunit
 from PatchedMeasCal.edge_bfs import CouplingMapGraph
 from PatchedMeasCal.tensor_patch_cal import TensorPatchFitter
 
-from qiskit.providers.fake_provider import FakeVigo
+import qiskit
+from qiskit.providers.fake_provider import FakeVigo, FakeTokyo
 
 class BackendTest(pyunit.TestCase):
 
@@ -15,17 +16,27 @@ class BackendTest(pyunit.TestCase):
         backend = FakeVigo()
         tpf = TensorPatchFitter(backend)
         tpf.build()
-        #tpf._coupling_graph = CouplingMapGraph(backend.configuration().coupling_map)
-        #tpf.construct_edge_calibrations(4000)
 
-    def test_meas_fitter(self):
-        '''
-            Loads a real backend object and checks that duplicate edge directions are culled
-        '''
+    def test_apply(self):
         backend = FakeVigo()
         tpf = TensorPatchFitter(backend)
         tpf.build()
-        tpf.build_meas_fitter()
+
+        results_vec = {'11111':10, '00001':12}
+        tpf.apply(results_vec)
+
+    def test_large(self):
+        backend = FakeTokyo()
+        tpf = TensorPatchFitter(backend)
+        tpf.build()
+
+        results_vec = {'11111':10, '00001':12}
+        tpf.apply(results_vec)
+
+    def test_circuit(self):
+        backend = FakeVigo()
+        circuit = qiskit.QuantumCircuit()
+
 
         
 
