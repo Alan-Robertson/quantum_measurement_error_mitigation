@@ -8,21 +8,6 @@ def vprint(verbose, string):
     if verbose:
         print(string)
 
-def normalise(x):
-    '''
-        Normalise the partial trace of a calibration matrix
-    '''
-    for i in range(x.shape[1]):
-        tot = sum(x[:, i])
-        if tot != 0:
-            x[:, i] /= tot
-    return x
-
-def f_dims(n):
-    '''
-        Dimension ordering for n qubits
-    '''
-    return [[2 for i in range(n)]] * 2
 
 
 def vProgressbar(verbose, *args, **kwargs):
@@ -57,16 +42,16 @@ class Progressbar():
         self.invoked = -1 # Number of times it has been invoked
 
     def tick(self, message=''):
+        if self.invoked > self.n_calls: # Invoked too many times
+            return
+        self.invoked += 1        
+
+        if self.invoked + 1 >= self.n_calls: # Final Call
+            self.invoked = self.n_calls
+
         ticker = floor(self.invoked / self.n_calls * self.n_ticks) * self.ticker
         blank = (self.n_ticks - len(ticker) - 1) * self.ticker_blank
         head = [self.ticker_head, ''][len(ticker) >= self.n_ticks]
-        self.invoked += 1 
-
-        if self.invoked > self.n_calls:
-            return
-
-        if self.invoked + 1 >= self.n_calls:
-            self.invoked += 1
 
         fstring = "\r{name} : [{ticker}{head}{blank}] {pct:.1f}% {msg}".format(
                 name = self.name,
@@ -78,8 +63,11 @@ class Progressbar():
                 )
         print(fstring, end='', flush=True)
         
-        if self.invoked >= self.n_calls:
+        if self.invoked >= self.n_calls: # Final Call, print newline
             print()
 
     def __call__(self, *args, **kwargs):
         return self.tick(*args, **kwargs)
+
+
+

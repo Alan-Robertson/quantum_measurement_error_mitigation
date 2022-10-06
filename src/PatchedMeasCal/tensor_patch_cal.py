@@ -16,7 +16,7 @@ from qiskit import QuantumCircuit, execute, Aer, QuantumCircuit
 from qiskit.ignis.mitigation.measurement import complete_meas_cal, tensored_meas_cal, CompleteMeasFitter, TensoredMeasFitter
 
 from PatchedMeasCal.edge_bfs import CouplingMapGraph
-from PatchedMeasCal.utils import f_dims, normalise, vProgressbar, vprint, vtick
+from PatchedMeasCal.utils import vProgressbar, vprint, vtick
 
 class CalibrationMatrix():
     def __init__(self, calibration_matrix, edge=None):
@@ -191,11 +191,11 @@ class TensorPatchFitter():
                         scipy.sparse.coo_matrix(
                             patch_matrix.calibration_matrix
                             ),
-                        dims=f_dims(patch_matrix.n_edge_qubits)
+                        dims=self.f_dims(patch_matrix.n_edge_qubits)
                         )
 
                     # Take the partial trace for the single qubit approximation
-                    single_qubit_approx = normalise(
+                    single_qubit_approx = self.normalise(
                         np.array(
                             cal_matrix.ptrace(position)
                         )
@@ -215,11 +215,11 @@ class TensorPatchFitter():
                     sparse_eye = scipy.sparse.eye(2 ** (patch_matrix.n_edge_qubits - 1))
                     expanded_approx_l = scipy.sparse.coo_matrix(mean_approx_l).tocsr()
                     expanded_approx_l = scipy.sparse.kron(expanded_approx_l, sparse_eye)
-                    expanded_approx_l = qutip.Qobj(expanded_approx_l, dims=f_dims(patch_matrix.n_edge_qubits))
+                    expanded_approx_l = qutip.Qobj(expanded_approx_l, dims=self.f_dims(patch_matrix.n_edge_qubits))
 
                     expanded_approx_r = scipy.sparse.coo_matrix(mean_approx_r).tocsr()
                     expanded_approx_r = scipy.sparse.kron(expanded_approx_r, sparse_eye)
-                    expanded_approx_r = qutip.Qobj(expanded_approx_r, dims=f_dims(patch_matrix.n_edge_qubits))
+                    expanded_approx_r = qutip.Qobj(expanded_approx_r, dims=self.f_dims(patch_matrix.n_edge_qubits))
 
                     # Construct permutation order
                     order = list(range(patch_matrix.n_edge_qubits))
@@ -298,7 +298,7 @@ class TensorPatchFitter():
                     2 ** (self.n_qubits - patch_matrix.n_edge_qubits),
                     dtype=np.float64)
                 )
-            expanded_approx = qutip.Qobj(expanded_approx, dims=f_dims(self.n_qubits))
+            expanded_approx = qutip.Qobj(expanded_approx, dims=self.f_dims(self.n_qubits))
 
             # Construct ordering for permutation
             # First n elements of the expanded approximation are non-identity and need to be correctly swapped
@@ -374,15 +374,15 @@ class TensorPatchFitter():
             results_vec = meas_fit.calibration_matrix @ results_vec
 
 
-        results_arr = results_vec.toarray()
-        results_arr[results_arr < 0] = 0
+        #results_arr = results_vec.toarray()
+        results_vec[results_vec < 0] = 0
 
-        results_arr /= np.sum(results_arr)
-        results_arr *= n_shots
+        results_vec /= np.sum(results_vec)
+        results_vec *= n_shots
         shot_results = {}
-        for i, res in enumerate(results_arr):
+        for i, res in zip(results_vec.indices, results_vec.data):
             string = bin(i)[2:].zfill(self.n_qubits)[::-1] # To get back to qiskit's insane reversed strings
-            shot_results[string] = res[0]
+            shot_results[string] = res
         return shot_results
 
     def apply_meas_fitter(self, measurement_results, verbose=True):
@@ -394,6 +394,25 @@ class TensorPatchFitter():
     @staticmethod
     def state_labels(n_qubits):
         return list(map(lambda x: bin(x)[2:], range(2 ** n_qubits)))
+
+    @staticmethod
+    def normalise(x):
+        '''
+            Normalise the partial trace of a calibration matrix
+        '''
+        for i in range(x.shape[1]):
+            tot = sum(x[:, i])
+            if tot != 0:
+                x[:, i] /= tot
+        return x
+
+    @staticmethod
+    def f_dims(n):
+        '''
+            Dimension ordering for n qubits
+        '''
+        return [[2 for i in range(n)]] * 2
+
 
 
 def composite_filter(circuit, probs=None, n_shots=1000, n_qubits=4, **kwargs):
