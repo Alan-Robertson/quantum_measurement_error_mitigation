@@ -3,6 +3,9 @@ import qiskit
 from qiskit.providers.fake_provider import fake_backend
 from qiskit.providers.models import BackendProperties, QasmBackendConfiguration
 
+from functools import partial
+from numpy import random
+
 
 basis_gates_1q = ["id", "rz", "sx", "x"]
 basis_gates_2q = ["cx"]
@@ -15,6 +18,9 @@ def const(x):
     def fn(*args, **kwargs):
         return x
     return fn
+
+def uniform_random(low, high, *args, size=None, **kwargs):
+    return low + (high - low) * random.random(size=size)
     
 
 def qubit_property_builder(name, value, unit, *args, curr_time=None, **kwargs):
@@ -52,15 +58,15 @@ def generate_configuration(name, n_qubits, coupling_map):
 def generate_properties(name, 
                         n_qubits, 
                         coupling_map, 
-                        errors_1q = const(0.01), # TODO GET LIMA DATA
+                        errors_1q = const(0.001), # TODO GET LIMA DATA
                         errors_2q = const(0.01),  # TODO GET LIMA DATA
-                        meas_errors01 = const(0.02),  # TODO GET LIMA DATA
-                        meas_errors10 = const(0.08),  # TODO GET LIMA DATA
-                       t1 = const(600),
-                       t2 = const(600),
+                        meas_errors01 = partial(uniform_random, 0.02, 0.08),  # TODO GET LIMA DATA
+                        meas_errors10 = partial(uniform_random, 0.02, 0.08),  # TODO GET LIMA DATA
+                       t1 = const(100),
+                       t2 = const(50),
                        freq = const(5),
-                       readout = const(0.05),
-                       gate_duration = const(100),
+                       readout = partial(uniform_random, 0.02, 0.08),
+                       gate_duration = const(8),
                        curr_time = str(datetime.now())):
     properties = {"backend_version": "0.0.1", "general": [], "last_update_date": curr_time, "backend_name": name}
     
@@ -170,7 +176,7 @@ class Hexagonal16(FakeBackendWrapper):
     ]
 
 class Hexagonal(FakeBackendWrapper):
-    """A fake 16 qubit fully connected backend."""
+    """A fake Hexagonal backend."""
 
     def __init__(self, n_rows, n_columns):
         self.n_rows = n_rows
@@ -213,8 +219,8 @@ class Hexagonal(FakeBackendWrapper):
         '''
         return i * self.n_columns * 2 + j
                 
-class Square(FakeBackendWrapper):
-    """A fake 16 qubit fully connected backend."""
+class Grid(FakeBackendWrapper):
+    """A Gridded backend."""
 
     def __init__(self, n_rows, n_columns):
         self.n_rows = n_rows
@@ -250,4 +256,3 @@ class Square(FakeBackendWrapper):
             Turns a set of coordinates into an integer
         '''
         return i + j * self.n_rows
-                       

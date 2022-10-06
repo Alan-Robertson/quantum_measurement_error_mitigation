@@ -375,11 +375,14 @@ class TensorPatchFitter():
 
 
         results_arr = results_vec.toarray()
+        results_arr[results_arr < 0] = 0
+
+        results_arr /= np.sum(results_arr)
+        results_arr *= n_shots
         shot_results = {}
         for i, res in enumerate(results_arr):
-            if res > 0:
-                string = bin(i)[2:].zfill(self.n_qubits)[::-1] # To get back to qiskit's insane reversed strings
-                shot_results[string] = res[0]
+            string = bin(i)[2:].zfill(self.n_qubits)[::-1] # To get back to qiskit's insane reversed strings
+            shot_results[string] = res[0]
         return shot_results
 
     def apply_meas_fitter(self, measurement_results, verbose=True):
@@ -433,9 +436,6 @@ def composite_filter(circuit, probs=None, n_shots=1000, n_qubits=4, **kwargs):
     for i in result:
         qiskit_results_qubit_order[i[::-1]] = result[i]
     return qiskit_results_qubit_order
-
-
-    
 
 
 def cal_res_measurement_error(
