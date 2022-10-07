@@ -9,11 +9,26 @@ def design_circuit(n_qubits, inv_arr, circuit=None):
         circuit = qiskit.QuantumCircuit(n_qubits, n_qubits)
     
     for i, element in enumerate(inv_arr):
-        if int(element) == 1:
+        if int(element) == 1: # In case of strings rather than integers
             circuit.x(i)
     
+    # Cheating, we're going to measure all of them, because there are no nice mappings in qiskit and I don't want to have to traverse the dag :(
+    # TODO: Traverse the DAG and re-implement the correct final measurements
     circuit.measure(list(range(n_qubits)), list(range(n_qubits)))
     return circuit
+
+def strip_measurement(circuit):
+    '''
+        Creates a new version of the circuit sans measurement
+    '''
+    stripped_circuit = copy.deepcopy(circuit)
+    i = 0
+    while i < len(stripped_circuit.data):
+        if stripped_circuit[i].operation.name == 'measure':
+            stripped_circuit.data.pop(i)
+            i -= 1
+        i += 1
+    return stripped_circuit
 
 # SIM for even numbers of measured qubits 
 def sim(circuit,
@@ -25,8 +40,7 @@ def sim(circuit,
         ):
     
     # Strip measurements
-    circuit = copy.deepcopy(circuit)
-    circuit.remove_final_measurements()
+    circuit = strip_measurement(circuit)
 
     sim_strs = [
         [0] * n_qubits, 
@@ -76,8 +90,7 @@ def aim(circuit, # Circuit should not include measurement operators!
        ):
     
     # Strip measurements
-    circuit = copy.deepcopy(circuit)
-    circuit.remove_final_measurements()
+    circuit = strip_measurement(circuit)
 
     aim_strs = [[0] * n_qubits for _ in range(n_qubits)]
     
