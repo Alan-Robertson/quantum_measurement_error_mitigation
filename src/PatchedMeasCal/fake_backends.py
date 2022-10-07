@@ -256,3 +256,55 @@ class Grid(FakeBackendWrapper):
             Turns a set of coordinates into an integer
         '''
         return i + j * self.n_rows
+
+
+
+class SquareOctagonal(FakeBackendWrapper):
+    """A fake Hexagonal backend"""
+
+    def __init__(self, n_rows, n_columns):
+        self.n_rows = n_rows
+        self.n_columns = n_columns
+        self.n_qubits = None
+        self._coupling_map = None
+        self.gen_coupling_map()
+        super().__init__("Oct", self.n_qubits, self._coupling_map)
+
+    
+    def gen_coupling_map(self):
+        q_rows = self.n_rows * 4
+        q_cols = self.n_columns * 2
+        self.n_qubits = q_rows * q_cols
+        self._coupling_map = []
+        
+        # Vertical joins        
+        for i in range(q_rows):
+            for j in range(q_cols):
+                
+                # Vertical edges
+                if (i < q_rows - 1):
+                    super().cmap_append(
+                        self._coupling_map,
+                        self.pti(i, j),
+                        self.pti(i + 1, j)
+                    )
+                    
+                # Horizontal edges
+                if (j % 2) == 0 and (i % 4) in [0, 3] and j < q_cols - 1:
+                    super().cmap_append(
+                        self._coupling_map,
+                        self.pti(i, j),
+                        self.pti(i, j + 1)
+                    )
+                if (j % 2) == 1 and (i % 4) in [1, 2] and j < q_cols - 1:
+                    super().cmap_append(
+                        self._coupling_map,
+                        self.pti(i, j),
+                        self.pti(i, j + 1)
+                    )
+    
+    def pti(self, i, j):
+        '''
+            Turns a set of coordinates into an integer
+        '''
+        return i * self.n_columns * 2 + j
