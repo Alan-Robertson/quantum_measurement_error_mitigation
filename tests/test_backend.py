@@ -33,9 +33,6 @@ class BackendTest(pyunit.TestCase):
         results_vec = {'11111':10, '00001':12}
         tpf.apply(results_vec)
 
-    def test_circuit(self):
-        backend = FakeVigo()
-        circuit = qiskit.QuantumCircuit()
 
 
         

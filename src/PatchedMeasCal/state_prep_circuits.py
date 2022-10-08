@@ -1,4 +1,6 @@
 import qiskit
+import numpy as np
+import scipy
 
 def res_to_sparse_vec(measurement_results):
     '''
@@ -22,14 +24,14 @@ def res_to_vec(measurement_results):
     '''
 
     n_qubits = len(measurement_results.keys().__iter__().__next__())
-    n_elements = n_qubits ** 2 
+    n_elements = 2 ** n_qubits 
     results_vec = np.zeros(n_elements, dtype=np.float32)
 
     for state in measurement_results:
-        results_vec[int(state, 2)[::-1]] = measurement_results[state]
-    return results_results_vec
+        results_vec[int(state[::-1], 2)] = measurement_results[state]
+    return results_vec
 
-def plus_state_prep(backend):
+def plus_state_prep(backend, target_qubits = None):
     '''
         Circuit that prepares the |00...0> + |11...1> state
     '''
@@ -54,23 +56,17 @@ def plus_state_prep(backend):
     circuit.measure(list(range(n_qubits)), list(range(n_qubits)))
     return circuit
 
-def plus_state_dist(results:dict, sparse=True):
-    n_qubits = len(measurement_results.keys().__iter__().__next__())
+def plus_state_dist(results:dict):
+    n_qubits = len(results.keys().__iter__().__next__())
 
     dist = 0
-    target_states = {0:0.5, (2 ** n_qubits) - 1:0.5}
+    target_states = ['0' * n_qubits, '1' *  n_qubits]
+    n_shots = sum(results.values())
 
-    if sparse:
-        vec = res_to_sparse_vec(results)
+    for state_str in target_states:
+        if state_str in results:
+            dist += np.abs(0.5 - (results[state_str] / n_shots))
 
-        for i, res in zip(results_vec.indices, results_vec.data):
-            if i not in target_states:
-                dist += res
-            else:
-                dist += abs(res - target_states[i])
-    else:
-        vec = res_to_vec(results)
-        target_vec = np.zeros()
     return dist
 
 
@@ -89,7 +85,7 @@ def equal_superposition_state_prep(backend):
     return circuit 
 
 def equal_superposition_state_dist(results:dict, *args, **kwargs):
-    n_qubits = len(measurement_results.keys().__iter__().__next__())
+    n_qubits = len(results.keys().__iter__().__next__())
     n_elements = 2 ** n_qubits
     vec = res_to_vec(results)
     target_vec = np.ones(n_elements) / n_elements
@@ -111,8 +107,8 @@ def integer_state_prep(backend, int_val):
     return circuit 
 
 def integer_state_dist(results:dict, int_val):
-    n_qubits = len(measurement_results.keys().__iter__().__next__())
-    int_val_key = bin(int_val)[:2].zfill(n_qubits)[::-1]
+    n_qubits = len(results.keys().__iter__().__next__())
+    int_val_key = bin(int_val)[2:].zfill(n_qubits)[::-1]
 
     dist = 1
     if int_val_key in results:

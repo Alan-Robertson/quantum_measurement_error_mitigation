@@ -58,12 +58,12 @@ def generate_configuration(name, n_qubits, coupling_map):
 def generate_properties(name, 
                         n_qubits, 
                         coupling_map, 
-                        errors_1q = const(0.001), # TODO GET LIMA DATA
-                        errors_2q = const(0.01),  # TODO GET LIMA DATA
-                        meas_errors01 = partial(uniform_random, 0.02, 0.08),  # TODO GET LIMA DATA
-                        meas_errors10 = partial(uniform_random, 0.02, 0.08),  # TODO GET LIMA DATA
-                       t1 = const(100),
-                       t2 = const(50),
+                        errors_1q = const(0.001), 
+                        errors_2q = const(0.01),  
+                        meas_errors01 = partial(uniform_random, 0.02, 0.08),  
+                        meas_errors10 = partial(uniform_random, 0.02, 0.08),  
+                       t1 = const(None),
+                       t2 = const(None),
                        freq = const(5),
                        readout = partial(uniform_random, 0.02, 0.08),
                        gate_duration = const(8),
@@ -71,8 +71,8 @@ def generate_properties(name,
     properties = {"backend_version": "0.0.1", "general": [], "last_update_date": curr_time, "backend_name": name}
     
     qubit_properties_template = [
-        ['T1', t1, 'µs'],
-        ['T2', t2, 'µs'],
+        #['T1', t1, 'µs'],
+        #['T2', t2, 'µs'],
         ['frequency', freq, 'GHz'],
         ['readout', readout, ''],
         ["prob_meas0_prep1", meas_errors01, ''],

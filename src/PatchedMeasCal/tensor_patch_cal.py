@@ -134,7 +134,7 @@ class TensorPatchFitter():
             ) 
 
         vprint(verbose, "\tExecuting Calibration Circuits")
-        calibration_results = execute(
+        calibration_results = qiskit.execute(
             transpiled_circs,
             self.backend,
             shots=n_shots,
@@ -276,7 +276,7 @@ class TensorPatchFitter():
             circs += calibration_circuits
         return circs
 
-    def build_meas_fitter(self, participating_qubits=None, verbose=False, inv_cal=True):
+    def build_meas_fitter(self, participating_qubits=None, verbose=False):
         # Join local patches into a sparse calibration matrix
         # TODO non-complete sets of qubits
         meas_fitter = []
@@ -286,10 +286,7 @@ class TensorPatchFitter():
             vtick(verbose, pb)
             
             # Invert each patch matrix
-            if inv_cal:
-                inv_matrix = scipy.sparse.linalg.inv(patch_matrix.calibration_matrix).real
-            else:
-                inv_matrix = patch_matrix.calibration_matrix.real
+            inv_matrix = scipy.sparse.linalg.inv(patch_matrix.calibration_matrix).real
 
             # Convert to sparse qutip object 
             expanded_approx = scipy.sparse.kron(
@@ -373,9 +370,9 @@ class TensorPatchFitter():
             vtick(verbose, pb)
             results_vec = meas_fit.calibration_matrix @ results_vec
 
-
-        #results_arr = results_vec.toarray()
-        results_vec[results_vec < 0] = 0
+            # Linear overhead to reduce matrix multiplication complexity
+            # Negative values introduced by pseudo-inverse
+            results_vec[results_vec < 0] = 0
 
         results_vec /= np.sum(results_vec)
         results_vec *= n_shots
