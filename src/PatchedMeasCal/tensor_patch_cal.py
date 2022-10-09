@@ -75,15 +75,13 @@ class TensorPatchFitter():
         # Converts coupling map tuples to integers
         return edge[0] * self.n_qubits + edge[1]
   
-    def build(self, probs=None, n_shots=None, assert_accuracy=False, shots_fixed=True, verbose=False):
+    def build(self, probs=None, n_shots=None, verbose=False):
         '''
         Build a composite map fitter given a backend and a coupling map
 
         :: probs    :: Simulated error channel to apply
         :: n_shots  :: Total number of shots to take
-        :: shots_fixed :: Constant number of shots, default is for comparing methods for equal numbers of shots
         :: n_qubits :: Number of qubits to measure
-        :: assert_accuracy :: Check accuracy of approximation
 
         Returns a composite map calibration filter
         TODO Setup for build once, rebuild meas_fit for circs
@@ -247,7 +245,6 @@ class TensorPatchFitter():
                             edge=patch_matrix.edge
                             )
                     participant_num += 1
-
         return patch_matrices
 
     def construct_calibration_circuits(self, patches, verbose=False):

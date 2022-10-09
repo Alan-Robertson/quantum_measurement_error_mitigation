@@ -5,18 +5,17 @@ from functools import partial
 
 from PatchedMeasCal.edge_bfs import CouplingMapGraph
 from PatchedMeasCal.inv_measure_methods import strip_measurement
+from PatchedMeasCal.utils import norm_results_dict
 
-def jigsaw(circuit, backend, n_shots):
+def jigsaw(circuit, backend, n_shots, verbose=False, equal_shot_distribution=False):
 
-    n_qubits = len(measurement_results.keys().__iter__().__next__())
+    n_qubits = len(backend.properties()._qubits)
 
-    n_shots_global = n_shots // 2
-    n_shots_pmfs = n_shots // 2
-
-    global_pmf_table = global_pmf(circuit, backend, n_shots)
+    global_pmf_table = build_global_pmf(circuit, backend, n_shots)
 
     # Picking random pairs
-    local_pmf_pairs = random.shuffle(list(range(n_qubits)))
+    local_pmf_pairs = list(range(n_qubits))
+    random.shuffle(local_pmf_pairs)
     local_pmf_pairs = [
             [i, j] for i, j in zip(
                 local_pmf_pairs[::2],
@@ -25,15 +24,19 @@ def jigsaw(circuit, backend, n_shots):
         ]
 
     # Because qiskit stores results strings backwards, the index ordering is reversed
-    local_pmf_pairs_index = [
-            [n_qubits - i, n_qubits - j] for i, j in zip(
-                local_pmf_pairs[::2],
-                local_pmf_pairs[1::2]
-                )
-        ]
+    local_pmf_pairs_index = [[(n_qubits - i) % n_qubits, (n_qubits - j) % n_qubits] for i, j in local_pmf_pairs]
 
-    local_pmf_circs = [local_pmf_circuit(circuit, backend, n_shots_pmfs, i) for i in local_pmf_pairs]
-    local_pmf_tables = local_pmf_table(local_pmf_circs, backend)
+    local_pmf_circs = [build_local_pmf_circuit(circuit, backend, pairs) for pairs in local_pmf_pairs]
+
+    if equal_shot_distribution:
+        n_shots_global = n_shots // 2
+        n_shots_pmfs = n_shots // (2 * len(local_pmf_circs))
+    else:
+        n_shots_global = n_shots
+        n_shots_pmfs = n_shots
+
+    
+    local_pmf_tables = build_local_pmf_tables(local_pmf_circs, local_pmf_pairs_index, backend, n_shots_pmfs)
 
     for table, pair in zip(local_pmf_tables, local_pmf_pairs_index):
         global_pmf_table = convolve(global_pmf_table, table, pair)
@@ -41,30 +44,43 @@ def jigsaw(circuit, backend, n_shots):
     return global_pmf_table
 
 
-def local_pmf_circuit(circuit, backend, n_shots, targets):
+def build_local_pmf_circuit(circuit, backend, targets):
     '''
         Builds a circuit for a local pmf
     '''
-    stripped_circuit = strip_measurement(circuit)
+    n_qubits = len(backend.properties()._qubits)
+    qubit_layout = list(range(n_qubits))
+    tc = qiskit.transpile(circuit, backend=backend, initial_layout=qubit_layout, optimization_level=0)
+
+    stripped_circuit = strip_measurement(tc)
+    stripped_circuit.cregs = [stripped_circuit._create_creg(len(targets), 'c')]
     stripped_circuit.measure(targets, list(range(len(targets))))
-    
+    return stripped_circuit
+
+def build_local_pmf_tables(circs, pairs, backend, n_shots):
     n_qubits = len(backend.properties()._qubits)
     qubit_layout = list(range(n_qubits))
+    local_pmf_tables = qiskit.execute(circs, 
+        backend=backend, 
+        initial_layout=qubit_layout, 
+        optimization_level=0,
+        shots=n_shots).result().get_counts()
+
+    for table in local_pmf_tables:
+        norm_results_dict(table)
+
+    return local_pmf_tables
+
+def build_global_pmf(circuit, backend, n_shots):
+    n_qubits = len(backend.properties()._qubits)
+    qubit_layout = list(range(n_qubits))
+
     tc = qiskit.transpile(circuit, backend=backend, initial_layout=qubit_layout, optimization_level=0)
-    return tc
+    res = qiskit.execute(tc, backend=backend, initial_layout=qubit_layout, optimization_level=0).result().get_counts()
+    norm_results_dict(res)
+    return res
 
-def global_pmf(circuit, backend, n_shots):
-    n_qubits = len(backend.properties()._qubits)
-    qubit_layout = list(range(n_qubits))
 
-    tc = qiskit.transpile(circuit, backend=backend, initial_layout=qubit_layout, optimization_level=0)
-    res = qiskit.execute(tc, backend=backend, initial_layout=qubit_layout, optimization_level=0).results().get_counts()
-    return tc
-
-def local_pmf_tables(circs, pairs):
-    n_qubits = len(backend.properties()._qubits)
-    qubit_layout = list(range(n_qubits))
-    return qiskit.execute(circs, backend=backend, initial_layout=qubit_layout, optimization_level=0).results().get_counts()
 
 
 def convolve(global_pmf_table, local_table, local_pair):
@@ -85,7 +101,11 @@ def convolve(global_pmf_table, local_table, local_pair):
         norm_val = sum(subtable.values())
         for jdx in subtable:
             subtable[jdx] /= norm_val # Norm
-            subtable[jdx] *= local_table[idx] / (1 - local_table[idx]) # Bayes Update
+            if idx in local_table: # This can happen
+                if local_table[idx] < 1:
+                    subtable[jdx] *= local_table[idx] / (1 - local_table[idx]) # Bayes Update
+                else:
+                    subtable[jdx] = 1
 
     # Rejoin the table
     joint_table = {}

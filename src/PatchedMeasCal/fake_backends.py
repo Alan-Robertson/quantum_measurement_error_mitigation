@@ -74,7 +74,7 @@ def generate_properties(name,
         #['T1', t1, 'µs'],
         #['T2', t2, 'µs'],
         ['frequency', freq, 'GHz'],
-        ['readout', readout, ''],
+        ['readout_error', readout, ''],
         ["prob_meas0_prep1", meas_errors01, ''],
         ["prob_meas1_prep0", meas_errors10, ''],
     ]

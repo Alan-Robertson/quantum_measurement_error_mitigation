@@ -31,6 +31,9 @@ def res_to_vec(measurement_results):
         results_vec[int(state[::-1], 2)] = measurement_results[state]
     return results_vec
 
+def GHZ_prep(*args, **kwargs):
+    return plus_state_prep(*args, **kwargs)
+
 def plus_state_prep(backend, target_qubits = None):
     '''
         Circuit that prepares the |00...0> + |11...1> state
@@ -55,6 +58,9 @@ def plus_state_prep(backend, target_qubits = None):
                         break
     circuit.measure(list(range(n_qubits)), list(range(n_qubits)))
     return circuit
+
+def GHZ_state_dist(results:dict):
+    return plus_state_dist(results)
 
 def plus_state_dist(results:dict):
     n_qubits = len(results.keys().__iter__().__next__())

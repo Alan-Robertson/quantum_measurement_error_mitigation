@@ -6,8 +6,7 @@ from PatchedMeasCal.tensor_patch_cal import TensorPatchFitter
 import qiskit
 from qiskit.providers.fake_provider import FakeVigo, FakeTokyo
 
-class BackendTest(pyunit.TestCase):
-
+class TensorPatchTest(pyunit.TestCase):
 
     def test_build(self):
         '''

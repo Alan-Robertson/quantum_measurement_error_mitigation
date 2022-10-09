@@ -1,8 +1,33 @@
 import unittest as pyunit
 
 from PatchedMeasCal import jigsaw
+from PatchedMeasCal.benchmarks import bv
+from PatchedMeasCal.fake_backends import Grid
+from PatchedMeasCal.utils import norm_results_dict
+
+import qiskit
+
 
 class StatePrepTest(pyunit.TestCase):
+
+    def test_jigsaw_advantage(self):
+        bv_str = '111'
+        backend = Grid(2, 2)
+        n_qubits = 4
+
+        # Base results
+        initial_layout = list(range(n_qubits))
+        circuit = bv.bv_circuit(bv_str, n_qubits)
+
+        tc = qiskit.transpile(circuit, backend=backend, optimization_level=0, initial_layout=initial_layout)
+        res_d = qiskit.execute(tc, backend, n_shots=1024, optimization_level=0, initial_layout=initial_layout).result().get_counts()
+        norm_results_dict(res_d)
+
+        jigsaw_res = jigsaw.jigsaw(circuit, backend, 16000)
+        
+        # This should statistically almost always hold
+        assert(jigsaw_res['1' * n_qubits] > res_d['1' * n_qubits])
+
 
     def test_convolve(self):
         '''

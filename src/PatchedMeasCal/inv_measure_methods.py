@@ -49,31 +49,18 @@ def sim(circuit,
         [1, 0] * (n_qubits // 2)
     ]
 
+    # Fixing up odd numbers of qubits
+    for sim_str in sim_strs:
+        if len(sim_str) < n_qubits:
+            sim_str.append(sim_str[0])
+
     if equal_shot_distribution:
         n_shots //= len(sim_strs)
-        
-    sim_results = {}
-    for inversion_arr in sim_strs:
-
-        tmp_circuit = copy.deepcopy(circuit)
-        tmp_circuit = design_circuit(n_qubits, inversion_arr, circuit=tmp_circuit)
-
-        job = qiskit.execute(tmp_circuit, backend, shots=n_shots)
-
-        results = job.result().get_counts()
-
-        if probs is not None:
-            noisy_measurement = measurement_error(results, n_qubits=n_qubits, probs=probs)
-            results = sample_distribution(noisy_measurement, shots)
-
-        for count in results:
-            # Invert SIM strings
-            count_arr = ''.join(map(str, [i ^ j for i, j in zip(inversion_arr, map(int, list(count[::-1])))]))
-
-            if count_arr in sim_results:
-                sim_results[count_arr] += results[count]
-            else:
-                sim_results[count_arr] = results[count]
+    
+    # Inv and run    
+    results = invert_build_run(circuit, n_qubits, backend, sim_strs, n_shots=n_shots, probs=probs)
+    
+    sim_results = additive_join_results(results)
 
     return sim_results
 
@@ -86,91 +73,84 @@ def aim(circuit, # Circuit should not include measurement operators!
         n_shots=1000,
         confirmation_shots = 1000,
         k=4, # Number of top results to use
-        equal_shot_distribution = False
+        equal_shot_distribution = False,
+        small_aim=False
        ):
-    
+
     # Strip measurements
-    circuit = strip_measurement(circuit)
+    eval_circuit = strip_measurement(circuit)
 
-    aim_strs = [[0] * n_qubits for _ in range(n_qubits)]
-    
-    for i in range(len(aim_strs)):
-        aim_strs[i][i] = 1
-    aim_strs += [[0] * n_qubits]
-
+    # Build AIM Strs
+    aim_strs = [[0] * n_qubits]
+    if small_aim:  
+        aim_strs = [[0] * n_qubits for _ in range(n_qubits)]
+        for i in range(len(aim_strs)):
+            aim_strs[i][i] = 1
+    else:
+        masks = [[1,0,0,1], [0,1,0,1], [1,0,1,0], [1,1,1,1]]
+        for mask in masks:
+            aim_strs += [([0] * (i * 2) + mask + [0] * (n_qubits - len(mask) - i * 2))[:n_qubits] for i in range((n_qubits - 1) // 2)]
 
     if equal_shot_distribution:
-        confirmation_shots = n_shots / (2 * k) # Half of all shots on confirmation
-        model_shots = n_shots / (2 * len(aim_strs)) # Half of all shots on model building
+        confirmation_shots = int(0.75 * n_shots / k) # 3/4 of all shots on confirmation
+        model_shots = int(0.25 * n_shots / len(aim_strs)) # 1/4 of all shots on model building
+    else:
+        confirmation_shots = n_shots
+        model_shots = n_shots
     
-    aim_results = {}
-    for inversion_arr in aim_strs:
-    
-        # Build and execute AIM circuits
-        tmp_circuit = copy.deepcopy(circuit)
-        tmp_circuit = design_circuit(n_qubits, inversion_arr, circuit=tmp_circuit)
-        job = qiskit.execute(tmp_circuit, backend, shots=model_shots)
-        results = job.result().get_counts()
+    # Inv and run    
+    model_results = invert_build_run(eval_circuit, n_qubits, backend, aim_strs, n_shots=model_shots, probs=probs)
+    joint_results = additive_join_results(model_results)
 
-        # Simulated Noisy Measurement
-        if probs is not None:
-            noisy_measurement = measurement_error(results, n_qubits=n_qubits, probs=probs)
-            results = sample_distribution(noisy_measurement, model_shots)
-
-        # Invert AIM Strings
-        aim_result = {}
-        for count in results:
-            count_arr = ''.join(map(str, [i ^ j for i, j in zip(inversion_arr, map(int, list(count[::-1])))]))
-
-            if count_arr in aim_result:
-                aim_result[count_arr] += results[count]
-            else:
-                aim_result[count_arr] = results[count]
-
-        aim_results[''.join(map(str, inversion_arr))] = aim_result
-    
-    # Join across inversion strings
-    likelihoods = {}
-    for res in aim_results:
-        for state in aim_results[res]:
-            if state in likelihoods:
-                likelihoods[state] += aim_results[res][state]
-            else:
-                likelihoods[state] = aim_results[res][state]
-    
     # Select top k strings
-    top_k = []
-    for i in range(k):
-        top = max(likelihoods.items(), key=lambda i: i[1])
-        top_k.append(top[0])
-        likelihoods.pop(top[0])
-    
+    string_strength = [(max(i.values()), arr) for i, arr in zip(model_results, aim_strs)]
+    string_strength.sort(reverse=True)
+    top_k = [arr for val, arr in string_strength[:k]]
 
-    # Run confirmation shots for statistics
-    tmp_circuits = [copy.deepcopy(circuit) for _ in range(k)]
-    tmp_circuits = [design_circuit(n_qubits, i, circuit=t) for i, t in zip(top_k, tmp_circuits)]
+    aim_results = invert_build_run(eval_circuit, n_qubits, backend, top_k, n_shots=confirmation_shots, probs=probs)
+    aim_results = additive_join_results(aim_results)
 
-    # Run final
-    aim_result = {}
-    for circ, inversion_arr in zip(tmp_circuits, top_k):
+    return aim_results
 
-        job = qiskit.execute(circ, backend, shots=confirmation_shots)
-        results = job.result().get_counts()
 
-        # Simulated Noisy Measurement
-        if probs is not None:
-            noisy_measurement = measurement_error(results, n_qubits=n_qubits, probs=probs)
-            results = sample_distribution(noisy_measurement, confirmation_shots)
+def invert_build_run(circuit, n_qubits, backend, inv_arrs, n_shots=1000, probs=None):
+    tmp_circuits = []
+    for inversion_arr in inv_arrs:
 
-        for count in results:
-            # Invert measurement results using k strings
-            count_arr = ''.join(
-                map(str, [i ^ j for i, j in zip(map(int, list(inversion_arr)), map(int, list(count[::-1])))])
-            )
+        tmp_circuit = copy.deepcopy(circuit)
+        tmp_circuits.append(design_circuit(n_qubits, inversion_arr, circuit=tmp_circuit))
 
-            if count_arr in aim_result:
-                aim_result[count_arr] += results[count]
+    job = qiskit.execute(tmp_circuits, backend, shots=n_shots)
+
+    inv_results = job.result().get_counts()
+    if probs is not None:
+        for i, result in enumerate(results):
+                noisy_measurement = measurement_error(result, n_qubits=n_qubits, probs=probs)
+                results[i] = sample_distribution(noisy_measurement, shots)
+
+    results = []
+    for inv_result, arr in zip(inv_results, inv_arrs):
+        # Invert strings
+        result = {}
+        for inv_meas_str in inv_result:
+            meas_str = ''.join(
+                map(
+                    str, 
+                    [i ^ j for i, j in zip(arr, map(int, list(inv_meas_str[::-1])))]
+                    )
+                )[::-1]
+
+            result[meas_str] = inv_result[inv_meas_str]
+        results.append(result)
+    return results
+            
+def additive_join_results(results):
+    # Join additively
+    joint_results = {}
+    for result in results:
+        for meas_str in result:
+            if meas_str in joint_results:
+                joint_results[meas_str] += result[meas_str]
             else:
-                aim_result[count_arr] = results[count]
-
-    return aim_result
+                joint_results[meas_str] = result[meas_str]
+    return joint_results

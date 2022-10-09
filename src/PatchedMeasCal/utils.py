@@ -24,6 +24,11 @@ def vflush(verbose):
     if verbose:
         print()
 
+def norm_results_dict(results):
+    norm_val = sum(results.values())
+    for i in results:
+        results[i] /= norm_val
+
 class Progressbar():
     
     def __init__(
@@ -84,7 +89,7 @@ class Progressbar():
 
     def eta_calc(self):
         if self.eta:
-            if self.invoked == 0:
+            if self.invoked == 0 or self.start_time is None:
                 self.start_time = time.time()
                 return 'ETA: '
             else:
