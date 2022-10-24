@@ -112,6 +112,17 @@ def integer_state_prep(backend, int_val):
     circuit.measure(list(range(n_qubits)), list(range(n_qubits)))
     return circuit 
 
+def integer_state_prep_sim(int_val, n_qubits):
+    '''
+        Circuit that prepares the |i> state
+    '''    
+    circuit = qiskit.QuantumCircuit(n_qubits, n_qubits)
+    for i, val in zip(range(n_qubits), bin(int_val)[2:].zfill(n_qubits)):
+        if val == '1':
+            circuit.x(i)
+    circuit.measure(list(range(n_qubits)), list(range(n_qubits)))
+    return circuit 
+
 def integer_state_dist(results:dict, int_val):
     n_qubits = len(results.keys().__iter__().__next__())
     int_val_key = bin(int_val)[2:].zfill(n_qubits)[::-1]

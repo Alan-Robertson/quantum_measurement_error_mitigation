@@ -131,6 +131,39 @@ class FakeBackendWrapper(fake_backend.FakeBackend):
         lst.append([a, b])
         lst.append([b, a])
 
+class ErrorFreeLocalSim(fake_backend.FakeBackend):
+    """A fake 16 qubit fully connected backend."""
+
+    def __init__(self, name, n_qubits, coupling_map):
+        self._name = name
+        self.n_qubits = n_qubits
+        self._coupling_map = coupling_map
+        
+        self._configuration = generate_configuration(self._name, self.n_qubits, self._coupling_map)
+        
+        properties = generate_properties(self.name, self.n_qubits, self._coupling_map,
+            errors_1q = const(0), 
+            errors_2q = const(0),  
+            meas_errors01 = const(0),  
+            meas_errors10 = const(0), 
+            readout = const(0)
+            )
+        self._properties = BackendProperties.from_dict(properties)
+        
+        super().__init__(self._configuration)
+        self._target = None
+        self.sim = None
+        
+    def properties(self):
+        return self._properties
+    
+    @staticmethod
+    def cmap_append(lst, a, b):
+        lst.append([a, b])
+        lst.append([b, a])
+
+
+
 class FullyConnected(FakeBackendWrapper):
     """A fake fully connected backend."""
 
@@ -142,6 +175,34 @@ class FullyConnected(FakeBackendWrapper):
     @staticmethod
     def gen_coupling_map(n_qubits):
         return [[i, j] for i in range(n_qubits) for j in range(n_qubits) if i != j] 
+
+class Hexagonal13(FakeBackendWrapper):
+    """A fake 16 qubit fully connected backend."""
+
+    def __init__(self):
+        self.n_qubits = 13
+        self._coupling_map = self.gen_coupling_map()
+        super().__init__("hex", self.n_qubits, self._coupling_map)
+
+    
+    def gen_coupling_map(self):
+        return [
+        [0, 1], [1, 0],
+        [1, 2], [2, 1],
+        [2, 3], [3, 2],
+        [3, 4], [4, 3],
+        [4, 5], [5, 4],
+        [0, 5], [5, 0],
+        [5, 6], [6, 5],
+        [6, 7], [7, 6],
+        [7, 8], [8, 7],
+        [8, 9], [9, 8],
+        [9, 4], [4, 9],
+        [3, 10], [10, 3],
+        [10, 11], [11, 10],
+        [11, 12], [12, 11],
+        [12, 9], [9, 12]   
+    ]
 
 class Hexagonal16(FakeBackendWrapper):
     """A fake 16 qubit fully connected backend."""
@@ -155,25 +216,68 @@ class Hexagonal16(FakeBackendWrapper):
     def gen_coupling_map(self):
         return [
         [0, 1], [1, 0],
-        [0, 2], [2, 0],
-        [1, 3], [3, 1],
-        [2, 4], [4, 2],
+        [1, 2], [2, 1],
+        [2, 3], [3, 2],
+        [3, 4], [4, 3],
         [4, 5], [5, 4],
-        [3, 5], [5, 3],
-        [3, 13], [13, 3],
-        [13, 14], [14, 13],
-        [14, 15], [15, 14],
-        [10, 15], [15, 10],
-        [10, 5], [5, 10],
-        [10, 12], [12, 10],
-        [11, 12], [12, 11],
-        [9, 11], [11, 9],
+        [0, 5], [5, 0],
+        [5, 6], [6, 5],
+        [6, 7], [7, 6],
+        [7, 8], [8, 7],
+        [8, 9], [9, 8],
         [9, 4], [4, 9],
-        [9, 8], [8, 9],
-        [8, 7], [7, 8],
-        [7, 6], [6, 7],
-        [6, 2], [2, 6],
+        [3, 10], [10, 3],
+        [10, 11], [11, 10],
+        [11, 12], [12, 11],
+        [12, 9], [9, 12],
+        [0, 13], [14, 0],
+        [13, 14], [15, 14],
+        [14, 15], [15, 1],
+        [15, 6], [6, 15]
     ]
+
+class LocalSimulator(ErrorFreeLocalSim):
+    """A fake fully connected backend."""
+
+    def __init__(self, n_qubits):
+        self.n_qubits = n_qubits
+        self._coupling_map = self.gen_coupling_map(self.n_qubits)
+        super().__init__("full", n_qubits, self._coupling_map)
+        
+    @staticmethod
+    def gen_coupling_map(n_qubits):
+        return [[i, j] for i in range(n_qubits) for j in range(n_qubits) if i != j] 
+# class Hexagonal16(FakeBackendWrapper):
+#     """A fake 16 qubit fully connected backend."""
+
+#     def __init__(self):
+#         self.n_qubits = 16
+#         self._coupling_map = self.gen_coupling_map()
+#         super().__init__("hex", self.n_qubits, self._coupling_map)
+
+    
+#     def gen_coupling_map(self):
+#         return [
+#         [0, 1], [1, 0],
+#         [0, 2], [2, 0],
+#         [1, 3], [3, 1],
+#         [2, 4], [4, 2],
+#         [4, 5], [5, 4],
+#         [3, 5], [5, 3],
+#         [3, 13], [13, 3],
+#         [13, 14], [14, 13],
+#         [14, 15], [15, 14],
+#         [10, 15], [15, 10],
+#         [10, 5], [5, 10],
+#         [10, 12], [12, 10],
+#         [11, 12], [12, 11],
+#         [9, 11], [11, 9],
+#         [9, 4], [4, 9],
+#         [9, 8], [8, 9],
+#         [8, 7], [7, 8],
+#         [7, 6], [6, 7],
+#         [6, 2], [2, 6],
+#     ]
 
 class Hexagonal(FakeBackendWrapper):
     """A fake Hexagonal backend."""
@@ -188,9 +292,9 @@ class Hexagonal(FakeBackendWrapper):
 
     
     def gen_coupling_map(self):
-        q_rows = self.n_rows * 3
-        q_cols = self.n_columns * 2
-        self.n_qubits = q_rows * q_cols
+        q_rows = (2 * self.n_rows + 1)
+        q_cols = self.n_columns + 1
+        self.n_qubits =  q_rows * q_cols
         self._coupling_map = []
         
         # Vertical joins        
@@ -199,19 +303,21 @@ class Hexagonal(FakeBackendWrapper):
                 
                 # Vertical edges
                 if (i < q_rows - 1):
-                    super().cmap_append(
-                        self._coupling_map,
-                        self.pti(i, j),
-                        self.pti(i + 1, j)
-                    )
+                    if self.pti(i + 1, j) <= self.n_qubits:
+                        super().cmap_append(
+                            self._coupling_map,
+                            self.pti(i, j),
+                            self.pti(i + 1, j)
+                        )
                     
                 # Horizontal edges
                 if ((i + j) % 2) == 0 and j < q_cols - 1:
-                    super().cmap_append(
-                        self._coupling_map,
-                        self.pti(i, j),
-                        self.pti(i, j + 1)
-                    )
+                    if self.pti(i + 1, j) <= self.n_qubits:
+                        super().cmap_append(
+                            self._coupling_map,
+                            self.pti(i, j),
+                            self.pti(i, j + 1)
+                        )
     
     def pti(self, i, j):
         '''
@@ -308,3 +414,6 @@ class SquareOctagonal(FakeBackendWrapper):
             Turns a set of coordinates into an integer
         '''
         return i * self.n_columns * 2 + j
+
+
+

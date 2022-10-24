@@ -23,7 +23,7 @@ class StatePrepTest(pyunit.TestCase):
         res_d = qiskit.execute(tc, backend, n_shots=1024, optimization_level=0, initial_layout=initial_layout).result().get_counts()
         norm_results_dict(res_d)
 
-        jigsaw_res = jigsaw.jigsaw(circuit, backend, 16000)
+        jigsaw_res = jigsaw.jigsaw(circuit, backend, 16000, probs=None)
         
         # This should statistically almost always hold
         assert(jigsaw_res['1' * n_qubits] > res_d['1' * n_qubits])

@@ -1,5 +1,6 @@
 from math import floor
 import time
+import copy
 
 '''
     A few utility functions
@@ -26,8 +27,22 @@ def vflush(verbose):
 
 def norm_results_dict(results):
     norm_val = sum(results.values())
-    for i in results:
+    for i in results: 
         results[i] /= norm_val
+
+def dict_distance(noise_free_results, error_prone_results):
+    noise_free_results = copy.deepcopy(noise_free_results)
+    error_results = copy.deepcopy(error_prone_results)
+    norm_results_dict(noise_free_results)
+    norm_results_dict(error_results)
+
+    dist = 0
+    for res in noise_free_results:
+        if res in error_prone_results:
+            dist += abs(noise_free_results[res] - error_results[res])
+        else:
+            dist += noise_free_results[res]
+    return dist
 
 class Progressbar():
     
@@ -99,8 +114,6 @@ class Progressbar():
                 return 'ETA: {}s'.format(est_time_left)
         return ''
                 
-
-
 
 
 

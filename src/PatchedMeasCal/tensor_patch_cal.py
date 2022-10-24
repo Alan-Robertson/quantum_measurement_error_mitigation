@@ -111,7 +111,7 @@ class TensorPatchFitter():
         # Approximate two qubit error channel for calibration
         # These will also need to be sparse
         if probs is not None:
-                pair_probs = np.array(probs)[:4, :4]
+                pair_probs = probs.sub_set(2)
 
         # Fix our qubit layout
         # We will only be using adjacent edges so all operations should be legal
@@ -147,11 +147,16 @@ class TensorPatchFitter():
             patch_results = []
             for result in patch_result:
                 counts = result.data.counts
+
                 bin_counts = {}
                 # From hex to a binary string
                 for res in counts:
                     key = bin(int(res[2:], 16))[2:].zfill(2 * len(patch))
                     bin_counts[key] = counts[res]
+
+                # Apply fake probs
+                if probs is not None:
+                    bin_counts = pair_probs(bin_counts)
 
                 patch_results.append(bin_counts)
             calibration_counts.append(patch_results)

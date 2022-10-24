@@ -124,9 +124,8 @@ def invert_build_run(circuit, n_qubits, backend, inv_arrs, n_shots=1000, probs=N
 
     inv_results = job.result().get_counts()
     if probs is not None:
-        for i, result in enumerate(results):
-                noisy_measurement = measurement_error(result, n_qubits=n_qubits, probs=probs)
-                results[i] = sample_distribution(noisy_measurement, shots)
+        for i, result in enumerate(inv_results):
+                inv_results[i] = probs(result)
 
     results = []
     for inv_result, arr in zip(inv_results, inv_arrs):
