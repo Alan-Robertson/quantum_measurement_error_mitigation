@@ -4,9 +4,10 @@ import copy
 
 class FakeMeasurementError():
 
-    def __init__(self, error_arr_c, error_arr_u, error_arr_d, n_qubits = 5, s_penalty=0.3):
-        self.probs = self.gen_probs(error_arr_c, error_arr_u, error_arr_d, n_qubits=n_qubits, s_penalty=0.3)
+    def __init__(self, error_arr_c, error_arr_u, error_arr_d, n_qubits = 5, s_penalty=0.3, coupling_map=None):
+        self.probs = self.gen_probs(error_arr_c, error_arr_u, error_arr_d, n_qubits=n_qubits, s_penalty=0.3, coupling_map=coupling_map)
         self.n_qubits=n_qubits
+        self.coupling_map=coupling_map
         
     def __call__(self, counts):
         return self.noisy_measure(counts)
@@ -14,6 +15,7 @@ class FakeMeasurementError():
     def noisy_measure(self, counts):
         n_shots = sum(counts.values())
 
+        # Vectorise counts
         vec = np.zeros((2 ** self.n_qubits, 1))
         for i in range(2 ** self.n_qubits):
             try:
@@ -55,7 +57,7 @@ class FakeMeasurementError():
         return new_population
 
     @staticmethod
-    def gen_probs(error_arr_c, error_arr_u, error_arr_d, n_qubits = 5, s_penalty=0.3):
+    def gen_probs(error_arr_c, error_arr_u, error_arr_d, n_qubits = 5, s_penalty=0.3, coupling_map=None):
         probs = [[0] * (2 ** n_qubits) for _ in range(2 ** n_qubits)]
             
         if len(error_arr_c) != n_qubits + 1:
@@ -74,10 +76,20 @@ class FakeMeasurementError():
             for col in range(2 ** n_qubits):
                 col_str = bin(col)[2:].zfill(n_qubits)
 
-                diff_str = [i - j for i, j in zip(list(map(int, row_str)), list(map(int, col_str)))]   
+                diff_str = [i - j for i, j in zip(list(map(int, row_str)), list(map(int, col_str)))]
+
+                if coupling_map is not None:
+                    n_edges = 0
+                    n_err = sum(np.abs(diff_str))
+                    for i, v_i in enumerate(diff_str):
+                        for j, v_j in  enumerate(diff_str):
+                            if i != j and v_i != 0 and v_j != 0:
+                                if [i, j] in coupling_map:
+                                    n_edges += 1
+                    if n_err - 1 > n_edges:
+                        continue
                 
                 #probs[row][col] -= s_penalty * sum(1 if i == 1 else 0 for i in row_str)
-                
                 probs[row][col] += error_arr_u[sum(1 if i == -1 else 0 for i in diff_str)]
                 probs[row][col] += error_arr_d[sum(1 if i == 1 else 0 for i in diff_str)]
                 probs[row][col] += error_arr_c[n_qubits - sum(1 if i == 0 else 0 for i in diff_str)]

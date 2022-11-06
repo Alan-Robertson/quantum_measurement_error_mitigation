@@ -236,6 +236,19 @@ class Hexagonal16(FakeBackendWrapper):
         [15, 6], [6, 15]
     ]
 
+class LinearArch(ErrorFreeLocalSim):
+    """A fake fully connected backend."""
+
+    def __init__(self, n_qubits):
+        self.n_qubits = n_qubits
+        self._coupling_map = self.gen_coupling_map(self.n_qubits)
+        super().__init__("full", n_qubits, self._coupling_map)
+        
+    @staticmethod
+    def gen_coupling_map(n_qubits):
+        return [[i, i + 1] for i in range(n_qubits - 1)] 
+
+
 class LocalSimulator(ErrorFreeLocalSim):
     """A fake fully connected backend."""
 
