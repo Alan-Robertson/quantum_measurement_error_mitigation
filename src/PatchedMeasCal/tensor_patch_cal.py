@@ -108,11 +108,7 @@ class TensorPatchFitter():
         '''
             Builds calibrations for each edge via patching
         '''
-        # Approximate two qubit error channel for calibration
-        # These will also need to be sparse
-        if probs is not None:
-                pair_probs = probs.sub_set(2)
-
+        
         # Fix our qubit layout
         # We will only be using adjacent edges so all operations should be legal
         initial_layout = list(range(self.n_qubits))
@@ -156,6 +152,8 @@ class TensorPatchFitter():
 
                 # Apply fake probs
                 if probs is not None:
+                    # Approximate two qubit error channel for calibration
+                    pair_probs =  probs.sub_set(2, participating_qubits=reduce(lambda i, j: i + j, patch))
                     bin_counts = pair_probs(bin_counts)
 
                 patch_results.append(bin_counts)

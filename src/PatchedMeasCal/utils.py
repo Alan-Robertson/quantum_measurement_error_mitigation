@@ -115,7 +115,21 @@ class Progressbar():
         return ''
                 
 
+def f_dims(n:int):
+    '''
+        Dimension ordering for n qubits
+    '''
+    return [[2 for i in range(n)]] * 2
 
+def normalise(x): # Array
+    '''
+        Normalise the partial trace of a calibration matrix
+    '''
+    for i in range(x.shape[1]):
+        tot = sum(x[:, i])
+        if tot != 0:
+            x[:, i] /= tot
+    return x
 
 
 

@@ -1,16 +1,21 @@
 import numpy as np
 import random
 import copy
+import qutip
+
+from PatchedMeasCal.utils import f_dims, normalise
+from functools import partial
 
 class FakeMeasurementError():
 
-    def __init__(self, error_arr_c, error_arr_u, error_arr_d, n_qubits = 5, s_penalty=0.3, coupling_map=None):
+    def __init__(self, error_arr_c, error_arr_u, error_arr_d, n_qubits = 5, s_penalty=0.3, coupling_map=None, meas_filter=None):
         self.probs = self.gen_probs(error_arr_c, error_arr_u, error_arr_d, n_qubits=n_qubits, s_penalty=0.3, coupling_map=coupling_map)
         self.n_qubits=n_qubits
         self.coupling_map=coupling_map
+        self.meas_filter=meas_filter
         
-    def __call__(self, counts):
-        return self.noisy_measure(counts)
+    def __call__(self, counts, *args, **kwargs):
+        return self.noisy_measure(counts, *args, **kwargs)
 
     def noisy_measure(self, counts):
         n_shots = sum(counts.values())
@@ -28,16 +33,30 @@ class FakeMeasurementError():
             i_str = bin(i)[2:].zfill(self.n_qubits)
             counts_final[i_str] = err_counts[i] 
 
-        return self.sample_distribution(counts_final, n_shots)
+        counts_final = self.sample_distribution(counts_final, n_shots)
 
-    def sub_set(self, n_qubits):
-        subset = np.array(self.probs)[:2 ** n_qubits, :2 ** n_qubits]
-        for i in range(2 ** n_qubits):
-            norm_val = np.sum(subset[:, i])
-            subset[:, i] /= norm_val
+        if self.meas_filter is not None:
+            counts_final = self.meas_filter(counts_final)
+
+        return counts_final
+
+    def sub_set(self, n_qubits, participating_qubits=None):
+        if participating_qubits is None:
+            participating_qubits = list(range(n_qubits))
+
+        #subset = np.array(self.probs)[:2 ** n_qubits, :2 ** n_qubits]
+
+        subset = qutip.Qobj(np.array(self.probs), dims=f_dims(self.n_qubits)).ptrace(sel=participating_qubits)
+        subset = normalise(np.array(subset))
+        subset = list(map(list, subset.real))
+        
         subset_error_obj = copy.deepcopy(self)
         subset_error_obj.n_qubits = n_qubits
         subset_error_obj.probs = subset
+
+        if self.meas_filter is not None:
+            subset_error_obj.meas_filter = partial(self.meas_filter, participating_qubits=participating_qubits)
+
         return subset_error_obj
 
     @staticmethod
@@ -45,7 +64,7 @@ class FakeMeasurementError():
         # There are much more efficient ways to do this
         list_split = []
         for element in population:
-            list_split += [element] * population[element]
+            list_split += [element] * (population[element])
             
         list_pop = [random.choice(list_split) for _ in range(n_shots)]
         
@@ -104,3 +123,4 @@ class FakeMeasurementError():
             probs[row] = list(np_row)
         
         return probs
+

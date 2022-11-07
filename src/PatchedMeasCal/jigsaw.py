@@ -61,10 +61,6 @@ def build_local_pmf_circuit(circuit, backend, targets, n_qubits=None):
 
 def build_local_pmf_tables(circs, pairs, backend, n_shots, probs=None, n_qubits=None, meas_filter=None):
 
-    if probs is not None:
-        # Very crude estimate of probs
-        pair_probs = probs.sub_set(2)
-
     if n_qubits is None:
         n_qubits = len(backend.properties()._qubits)
     qubit_layout = list(range(n_qubits))
@@ -80,6 +76,7 @@ def build_local_pmf_tables(circs, pairs, backend, n_shots, probs=None, n_qubits=
 
     for i, table in enumerate(local_pmf_tables):
         if probs is not None:
+            pair_probs = probs.sub_set(2, participating_qubits=pairs[i])
             local_pmf_tables[i] = pair_probs(table)
         norm_results_dict(local_pmf_tables[i])
 
