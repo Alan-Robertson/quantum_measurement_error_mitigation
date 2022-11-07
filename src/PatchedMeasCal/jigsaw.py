@@ -7,7 +7,7 @@ from PatchedMeasCal.edge_bfs import CouplingMapGraph
 from PatchedMeasCal.inv_measure_methods import strip_measurement
 from PatchedMeasCal.utils import norm_results_dict
 
-def jigsaw(circuit, backend, n_shots, verbose=False, equal_shot_distribution=False, random_pairs=True, probs=None, n_qubits=None):
+def jigsaw(circuit, backend, n_shots, verbose=False, equal_shot_distribution=False, random_pairs=True, probs=None, n_qubits=None, meas_filter=None):
 
     if n_qubits is None and backend.properties() is not None:
         n_qubits = len(backend.properties()._qubits)
@@ -59,11 +59,7 @@ def build_local_pmf_circuit(circuit, backend, targets, n_qubits=None):
     stripped_circuit.measure(targets, list(range(len(targets))))
     return stripped_circuit
 
-def build_local_pmf_tables(circs, pairs, backend, n_shots, probs=None, n_qubits=None):
-
-    if probs is not None:
-        # Very crude estimate of probs
-        pair_probs = probs.sub_set(2)
+def build_local_pmf_tables(circs, pairs, backend, n_shots, probs=None, n_qubits=None, meas_filter=None):
 
     if n_qubits is None:
         n_qubits = len(backend.properties()._qubits)
@@ -74,8 +70,13 @@ def build_local_pmf_tables(circs, pairs, backend, n_shots, probs=None, n_qubits=
         optimization_level=0,
         shots=n_shots).result().get_counts()
 
+    if meas_filter is not None:
+        for i, pair in enumerate(pairs):
+            local_pmf_tables[i] = meas_filter(local_pmf_tables[i], participating_qubits=pair)
+
     for i, table in enumerate(local_pmf_tables):
         if probs is not None:
+            pair_probs = probs.sub_set(2, participating_qubits=pairs[i])
             local_pmf_tables[i] = pair_probs(table)
         norm_results_dict(local_pmf_tables[i])
 

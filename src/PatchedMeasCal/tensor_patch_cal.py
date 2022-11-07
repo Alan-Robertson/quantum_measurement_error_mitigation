@@ -108,11 +108,7 @@ class TensorPatchFitter():
         '''
             Builds calibrations for each edge via patching
         '''
-        # Approximate two qubit error channel for calibration
-        # These will also need to be sparse
-        if probs is not None:
-                pair_probs = probs.sub_set(2)
-
+        
         # Fix our qubit layout
         # We will only be using adjacent edges so all operations should be legal
         initial_layout = list(range(self.n_qubits))
@@ -156,6 +152,8 @@ class TensorPatchFitter():
 
                 # Apply fake probs
                 if probs is not None:
+                    # Approximate two qubit error channel for calibration
+                    pair_probs =  probs.sub_set(2, participating_qubits=reduce(lambda i, j: i + j, patch))
                     bin_counts = pair_probs(bin_counts)
 
                 patch_results.append(bin_counts)
@@ -281,6 +279,9 @@ class TensorPatchFitter():
     def build_meas_fitter(self, participating_qubits=None, verbose=False):
         # Join local patches into a sparse calibration matrix
         # TODO non-complete sets of qubits
+        if participating_qubits is not None:
+            return self.build_partial_meas_fitter(participating_qubits=participating_qubits, verbose=verbose)
+        
         meas_fitter = []
         # Reverse order of patch matrices
         pb = vProgressbar(verbose, 20, len(self._patch_matrices), "\tBuilding Meas Fitters from Patches")
@@ -306,6 +307,69 @@ class TensorPatchFitter():
             order_count = patch_matrix.n_edge_qubits
             pair_count = 0
             for i in range(self.n_qubits):
+                if i in patch_matrix:
+                    order.append(pair_count)
+                    pair_count += 1
+                else:
+                    order.append(order_count)
+                    order_count += 1
+
+            # Permute the order of the tensor
+            expanded_approx = expanded_approx.permute(order)._data.tocsc().real
+            meas_fitter.append(CalibrationMatrix(expanded_approx, edge=patch_matrix.edge))
+        return meas_fitter
+
+    def build_partial_meas_fitter(self, participating_qubits=None, verbose=False):
+        # Join local patches into a sparse calibration matrix
+        # TODO non-complete sets of qubits
+        
+        n_qubits = len(participating_qubits)
+
+        meas_fitter = []
+        # Reverse order of patch matrices
+        pb = vProgressbar(verbose, 20, len(self._patch_matrices), "\tBuilding Meas Fitters from Patches")
+        for patch_matrix in self._patch_matrices[::-1]:
+            vtick(verbose, pb)
+            
+            n_participating = sum([i in patch_matrix.edge for i in participating_qubits])
+            if n_participating == 0:
+                # Nothing contributes
+                continue
+            if n_participating < patch_matrix.n_edge_qubits:
+                # Trace out over edges
+                p_matrix = qutip.Qobj(
+                                patch_matrix.calibration_matrix, 
+                                dims=self.f_dims(patch_matrix.n_edge_qubits)
+                            )
+                partial_tr = [i for i, j in enumerate(patch_matrix.edge) if j in participating_qubits]
+                p_matrix = self.normalise(
+                        np.array(
+                            p_matrix.ptrace(partial_tr)
+                        )
+                    )
+                sp_matrix = scipy.sparse.csc_matrix(p_matrix)
+                inv_matrix = scipy.sparse.linalg.inv(sp_matrix)
+
+            else: 
+                # Invert each patch matrix
+                inv_matrix = scipy.sparse.linalg.inv(patch_matrix.calibration_matrix).real
+
+            # Convert to sparse qutip object 
+            expanded_approx = scipy.sparse.kron(
+                inv_matrix,
+                scipy.sparse.eye(
+                    2 ** (n_qubits - n_participating),
+                    dtype=np.float64)
+                )
+            expanded_approx = qutip.Qobj(expanded_approx, dims=self.f_dims(n_qubits))
+
+            # Construct ordering for permutation
+            # First n elements of the expanded approximation are non-identity and need to be correctly swapped
+            # Last k elements are all the identity and may be freely interchanged
+            order = []
+            order_count = n_participating
+            pair_count = 0
+            for i in participating_qubits:
                 if i in patch_matrix:
                     order.append(pair_count)
                     pair_count += 1
@@ -355,8 +419,16 @@ class TensorPatchFitter():
             cal_matrices.append(patch_calibration_matrices[::-1])
         return cal_matrices
 
-    def apply(self, measurement_results, verbose=False):
-        # Todo; subset of qubits
+    def __call__(self, *args, **kwargs):
+        return self.apply(*args, **kwargs)
+
+    def apply(self, measurement_results, participating_qubits=None, verbose=False):
+        if participating_qubits is not None:
+            meas_fitter = self.build_meas_fitter(participating_qubits=participating_qubits, verbose=verbose)
+            n_qubits = len(participating_qubits)
+        else:
+            meas_fitter = self._meas_fitter
+            n_qubits = self.n_qubits
 
         # These should be no more than the number of shots in size
         # Assumes correct mapping of qubits to vals
@@ -365,10 +437,10 @@ class TensorPatchFitter():
         values = list(measurement_results.values())
         n_shots = sum(values)
 
-        results_vec = scipy.sparse.csc_array((values, (rows, cols)), shape=(2 ** self.n_qubits, 1))
+        results_vec = scipy.sparse.csc_array((values, (rows, cols)), shape=(2 ** n_qubits, 1))
 
         pb = vProgressbar(verbose, 20, len(self._meas_fitter), "Applying Meas Fitters")
-        for meas_fit in self._meas_fitter[::-1]:
+        for meas_fit in meas_fitter[::-1]:
             vtick(verbose, pb)
             results_vec = meas_fit.calibration_matrix @ results_vec
 
@@ -380,7 +452,7 @@ class TensorPatchFitter():
         results_vec *= n_shots
         shot_results = {}
         for i, res in zip(results_vec.indices, results_vec.data):
-            string = bin(i)[2:].zfill(self.n_qubits)[::-1] # To get back to qiskit's insane reversed strings
+            string = bin(i)[2:].zfill(n_qubits)[::-1] # To get back to qiskit's insane reversed strings
             shot_results[string] = res
         return shot_results
 
@@ -411,6 +483,10 @@ class TensorPatchFitter():
             Dimension ordering for n qubits
         '''
         return [[2 for i in range(n)]] * 2
+
+
+
+
 
 
 
