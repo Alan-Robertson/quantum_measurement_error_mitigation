@@ -131,5 +131,10 @@ def normalise(x): # Array
             x[:, i] /= tot
     return x
 
+def list_fold(lst, fold_length):
+    for i in zip(*[lst[i::fold_length] for i in range(fold_length)]):
+        yield i
+    return
+
 
 

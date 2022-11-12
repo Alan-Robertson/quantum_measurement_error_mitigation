@@ -5,6 +5,7 @@ from qiskit.providers.models import BackendProperties, QasmBackendConfiguration
 
 from functools import partial
 from numpy import random
+from numpy import inf
 
 
 basis_gates_1q = ["id", "rz", "sx", "x"]
@@ -62,8 +63,8 @@ def generate_properties(name,
                         errors_2q = const(0.01),  
                         meas_errors01 = partial(uniform_random, 0.02, 0.08),  
                         meas_errors10 = partial(uniform_random, 0.02, 0.08),  
-                       t1 = const(None),
-                       t2 = const(None),
+                       t1 = const(inf),
+                       t2 = const(inf),
                        freq = const(5),
                        readout = partial(uniform_random, 0.02, 0.08),
                        gate_duration = const(8),
@@ -71,8 +72,8 @@ def generate_properties(name,
     properties = {"backend_version": "0.0.1", "general": [], "last_update_date": curr_time, "backend_name": name}
     
     qubit_properties_template = [
-        #['T1', t1, 'µs'],
-        #['T2', t2, 'µs'],
+        ['T1', t1, 'us'],
+        ['T2', t2, 'us'],
         ['frequency', freq, 'GHz'],
         ['readout_error', readout, ''],
         ["prob_meas0_prep1", meas_errors01, ''],

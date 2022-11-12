@@ -8,32 +8,44 @@ from functools import partial
 
 class FakeMeasurementError():
 
-    def __init__(self, error_arr_c, error_arr_u, error_arr_d, n_qubits = 5, s_penalty=0.3, coupling_map=None, meas_filter=None):
-        self.probs = self.gen_probs(error_arr_c, error_arr_u, error_arr_d, n_qubits=n_qubits, s_penalty=0.3, coupling_map=coupling_map)
+    def __init__(self, error_arr_c=None, error_arr_u=None, error_arr_d=None, n_qubits = 5, s_penalty=0.3, coupling_map=None, meas_filter=None, norm_error=None):
+        
+        if error_arr_c is None and error_arr_u is None and error_arr_d is None:
+            self.dedicated_meas_filter = True
+            self.probs = np.eye(2 ** n_qubits)
+        else:
+            self.dedicated_meas_filter = False    
+            self.probs = self.gen_probs(error_arr_c, error_arr_u, error_arr_d, n_qubits=n_qubits, s_penalty=0.3, coupling_map=coupling_map)
         self.n_qubits=n_qubits
         self.coupling_map=coupling_map
         self.meas_filter=meas_filter
+        if norm_error is not None:
+            self.norm_error(self, norm_err = norm_error)
         
     def __call__(self, counts, *args, **kwargs):
         return self.noisy_measure(counts, *args, **kwargs)
 
     def noisy_measure(self, counts):
-        n_shots = sum(counts.values())
 
-        # Vectorise counts
-        vec = np.zeros((2 ** self.n_qubits, 1))
-        for i in range(2 ** self.n_qubits):
-            try:
-                vec[i][0] = counts[str(bin(i)[2:].zfill(self.n_qubits))]
-            except:
-                pass
-        err_counts = list(map(round, list((self.probs @ vec).flatten())))    
-        counts_final = {}
-        for i in range(2 ** self.n_qubits):
-            i_str = bin(i)[2:].zfill(self.n_qubits)
-            counts_final[i_str] = err_counts[i] 
+        if not self.dedicated_meas_filter:
+            n_shots = sum(counts.values())
 
-        counts_final = self.sample_distribution(counts_final, n_shots)
+            # Vectorise counts
+            vec = np.zeros((2 ** self.n_qubits, 1))
+            for i in range(2 ** self.n_qubits):
+                try:
+                    vec[i][0] = counts[str(bin(i)[2:].zfill(self.n_qubits))]
+                except:
+                    pass
+            err_counts = list(map(round, list((self.probs @ vec).flatten())))    
+            counts_final = {}
+            for i in range(2 ** self.n_qubits):
+                i_str = bin(i)[2:].zfill(self.n_qubits)
+                counts_final[i_str] = err_counts[i] 
+
+            counts_final = self.sample_distribution(counts_final, n_shots)
+        else:
+            counts_final = counts
 
         if self.meas_filter is not None:
             counts_final = self.meas_filter(counts_final)
@@ -76,16 +88,16 @@ class FakeMeasurementError():
         return new_population
 
     @staticmethod
-    def gen_probs(error_arr_c, error_arr_u, error_arr_d, n_qubits = 5, s_penalty=0.3, coupling_map=None):
+    def gen_probs(error_arr_c=None, error_arr_u=None, error_arr_d=None, n_qubits = 5, s_penalty=0.3, coupling_map=None):
         probs = [[0] * (2 ** n_qubits) for _ in range(2 ** n_qubits)]
             
-        if len(error_arr_c) != n_qubits + 1:
+        if error_arr_c is not None and len(error_arr_c) != n_qubits + 1:
             raise Exception("Incorrect Error Array")
         
-        if len(error_arr_u) != n_qubits + 1:
+        if error_arr_u is not None and len(error_arr_u) != n_qubits + 1:
             raise Exception("Incorrect Error Array")
              
-        if len(error_arr_d) != n_qubits + 1:
+        if error_arr_d is not None and len(error_arr_d) != n_qubits + 1:
             raise Exception("Incorrect Error Array")
         
         for row in range(2 ** n_qubits):
@@ -109,9 +121,12 @@ class FakeMeasurementError():
                         continue
                 
                 #probs[row][col] -= s_penalty * sum(1 if i == 1 else 0 for i in row_str)
-                probs[row][col] += error_arr_u[sum(1 if i == -1 else 0 for i in diff_str)]
-                probs[row][col] += error_arr_d[sum(1 if i == 1 else 0 for i in diff_str)]
-                probs[row][col] += error_arr_c[n_qubits - sum(1 if i == 0 else 0 for i in diff_str)]
+                if error_arr_u is not None:
+                    probs[row][col] += error_arr_u[sum(1 if i == -1 else 0 for i in diff_str)]
+                if error_arr_d is not None:
+                    probs[row][col] += error_arr_d[sum(1 if i == 1 else 0 for i in diff_str)]
+                if error_arr_c is not None:
+                    probs[row][col] += error_arr_c[n_qubits - sum(1 if i == 0 else 0 for i in diff_str)]
                 
                 probs[row][col] = max(0, probs[row][col])
                 
@@ -123,4 +138,20 @@ class FakeMeasurementError():
             probs[row] = list(np_row)
         
         return probs
+
+    @staticmethod
+    def norm_error(probs, norm_err = 0.75):
+
+        np_probs = np.array(probs.probs)
+
+        norm_const = (np.trace(np_probs) / (2 ** probs.n_qubits)) / norm_err
+
+        diag = np_probs.diagonal() / norm_const
+
+        for i in range(2 ** probs.n_qubits):
+            np_probs[:, i] *= norm_const
+            np_probs[i, i] = diag[i]
+
+        probs.probs = list(map(list, np_probs))
+    
 

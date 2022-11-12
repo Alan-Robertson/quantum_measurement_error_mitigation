@@ -7,28 +7,31 @@ from PatchedMeasCal.edge_bfs import CouplingMapGraph
 from PatchedMeasCal.inv_measure_methods import strip_measurement
 from PatchedMeasCal.utils import norm_results_dict
 
-def jigsaw(circuit, backend, n_shots, verbose=False, equal_shot_distribution=False, random_pairs=True, probs=None, n_qubits=None, meas_filter=None):
+def jigsaw(circuit, backend, n_shots, 
+    verbose=False,  # Verbosity
+    equal_shot_distribution=False, # Splits number of shots equally, otherwise uses that number of shots per experiment
+    local_pmf_pairs=None, # Local pairs, random if not set
+    probs=None, # False error prob distribution
+    n_qubits=None,  # Number of qubits
+    meas_filter=None, # Inbuilt meas filter pass
+    norm_fix=False # Our normalisation fix for JIGSAW
+    ):
 
     if n_qubits is None and backend.properties() is not None:
         n_qubits = len(backend.properties()._qubits)
 
     global_pmf_table = build_global_pmf(circuit, backend, n_shots, probs=probs, n_qubits=n_qubits)
 
-    # Picking random pairs
-    local_pmf_pairs = list(range(n_qubits))
-    if random_pairs:
+    # If no allocation is provided, use random
+    if local_pmf_pairs is None:
+        local_pmf_pairs = list(range(n_qubits))
         random.shuffle(local_pmf_pairs)
-    local_pmf_pairs = [
-            [i, j] for i, j in zip(
-                local_pmf_pairs[::2],
-                local_pmf_pairs[1::2]
-                )
-        ]
-
-    # Because qiskit stores results strings backwards, the index ordering is reversed
-    local_pmf_pairs_index = [[(n_qubits - i) % n_qubits, (n_qubits - j) % n_qubits] for i, j in local_pmf_pairs]
-
-    local_pmf_circs = [build_local_pmf_circuit(circuit, backend, pairs, n_qubits=n_qubits) for pairs in local_pmf_pairs]
+        local_pmf_pairs = [
+                [i, j] for i, j in zip(
+                    local_pmf_pairs[::2],
+                    local_pmf_pairs[1::2]
+                    )
+            ]
 
     if equal_shot_distribution:
         n_shots_global = n_shots // 2
@@ -37,10 +40,21 @@ def jigsaw(circuit, backend, n_shots, verbose=False, equal_shot_distribution=Fal
         n_shots_global = n_shots
         n_shots_pmfs = n_shots
 
-    local_pmf_tables = build_local_pmf_tables(local_pmf_circs, local_pmf_pairs_index, backend, n_shots_pmfs, probs=probs, n_qubits=n_qubits)
+    # Because qiskit stores results strings backwards, the index ordering is reversed
+    local_pmf_pairs_index = [[(n_qubits - i) % n_qubits, (n_qubits - j) % n_qubits] for i, j in local_pmf_pairs]
+
+    local_pmf_circs = [build_local_pmf_circuit(circuit, backend, pairs, n_qubits=n_qubits) for pairs in local_pmf_pairs]
+
+    local_pmf_tables = build_local_pmf_tables(
+        local_pmf_circs,
+        local_pmf_pairs,
+        backend,
+        n_shots_pmfs,
+        probs=probs,
+        n_qubits=n_qubits)
 
     for table, pair in zip(local_pmf_tables, local_pmf_pairs[::-1]):
-        global_pmf_table = convolve(global_pmf_table, table, pair)
+        global_pmf_table = convolve(global_pmf_table, table, pair, norm_fix=norm_fix)
 
     return global_pmf_table
 
@@ -76,8 +90,8 @@ def build_local_pmf_tables(circs, pairs, backend, n_shots, probs=None, n_qubits=
 
     for i, table in enumerate(local_pmf_tables):
         if probs is not None:
-            pair_probs = probs.sub_set(2, participating_qubits=pairs[i])
-            local_pmf_tables[i] = pair_probs(table)
+            pair_probs = probs.sub_set(len(pairs[i]), participating_qubits=pairs[i])
+            local_pmf_tables[i] = pair_probs(local_pmf_tables[i])
         norm_results_dict(local_pmf_tables[i])
 
     return local_pmf_tables
@@ -97,7 +111,7 @@ def build_global_pmf(circuit, backend, n_shots, probs=None, n_qubits=None):
     return res
 
 
-def convolve(global_pmf_table, local_table, local_pair):
+def convolve(global_pmf_table, local_table, local_pair, norm_fix=False):
     '''
         This is the Bayes update for the jigsaw
     '''
@@ -114,8 +128,13 @@ def convolve(global_pmf_table, local_table, local_pair):
         subtable = split_table[idx]
         norm_val = sum(subtable.values())
         for jdx in subtable:
-            subtable[jdx] /= norm_val # Norm
+            if norm_fix and subtable[jdx] < norm_val: # Resolves issue of single element entries norming to 1
+                subtable[jdx] /= norm_val 
+            elif not norm_fix:
+                subtable[jdx] /= norm_val 
             if idx in local_table: # This can happen
+                if local_table[idx] == 1: # This can also happen, we're just avoiding a div 0 here
+                    local_table[idx] == 0.9999
                 try:
                     subtable[jdx] *= local_table[idx] / (1 - local_table[idx]) # Bayes Update
                 except:

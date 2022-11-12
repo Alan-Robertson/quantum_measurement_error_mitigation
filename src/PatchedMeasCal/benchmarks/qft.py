@@ -4,6 +4,7 @@ import qiskit
 import numpy as np
 
 from PatchedMeasCal.utils import norm_results_dict, dict_distance
+from PatchedMeasCal.state_prep_circuits import integer_state_dist
 
 def qft_rotations(circuit, n):
     """Performs qft on the first n qubits in circuit (without swaps)"""
@@ -40,5 +41,5 @@ def qft_circuit(qft_val, n_qubits):
         return circ
 
 
-
-
+def qft_state_dist(*args, **kwargs):
+    return integer_state_dist(*args, **kwargs)
