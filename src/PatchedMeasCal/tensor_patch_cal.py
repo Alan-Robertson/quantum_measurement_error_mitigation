@@ -153,7 +153,7 @@ class TensorPatchFitter():
                 # Apply fake probs
                 if probs is not None:
                     # Approximate two qubit error channel for calibration
-                    pair_probs =  probs.sub_set(2, participating_qubits=reduce(lambda i, j: i + j, patch))
+                    pair_probs =  probs.sub_set(sum(map(len, patch)), participating_qubits=reduce(lambda i, j: i + j, patch))
                     bin_counts = pair_probs(bin_counts)
 
                 patch_results.append(bin_counts)

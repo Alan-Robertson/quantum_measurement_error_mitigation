@@ -35,7 +35,7 @@ def jigsaw(circuit, backend, n_shots,
 
     if equal_shot_distribution:
         n_shots_global = n_shots // 2
-        n_shots_pmfs = n_shots // (2 * len(local_pmf_circs))
+        n_shots_pmfs = n_shots // (2 * len(local_pmf_pairs))
     else:
         n_shots_global = n_shots
         n_shots_pmfs = n_shots

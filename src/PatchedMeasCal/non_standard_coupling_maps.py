@@ -76,10 +76,10 @@ def circuit_weight_coupling_map(circuit, disjoint=True):
     return edges
 
 
-def error_coupling_map(backend=None, k=5, error_profile=None, job_manager=qiskit.execute, n_shots=16000):
+def error_coupling_map(backend=None, k=5, error_profile=None, job_manager=qiskit.execute, n_shots=16000, probs=None):
     
     if backend is not None:
-        cal_res, pairs = build_calibrations(backend, k=k, job_manager=job_manager, n_shots=n_shots)
+        cal_res, pairs = build_calibrations(backend, k=k, job_manager=job_manager, n_shots=n_shots, probs=probs)
         error_profile = build_cal_matrices(cal_res, backend, pairs, k=k)
 
     n_qubits = len(error_profile['single']) 
@@ -92,7 +92,8 @@ def error_coupling_map(backend=None, k=5, error_profile=None, job_manager=qiskit
 def build_calibrations(backend, 
     k=5,
     job_manager=qiskit.execute,
-    n_shots=16000):
+    n_shots=16000, 
+    probs=None):
 
     backend_cmap = qiskit.transpiler.CouplingMap(backend.configuration().coupling_map)
     n_qubits = len(backend.properties().qubits)
@@ -119,9 +120,16 @@ def build_calibrations(backend,
             tc += qiskit.transpile(circuits_paired, backend=backend, initial_layout=i)
 
     job = job_manager(tc, backend)
-    return job.result(), pairs
+    results = job.result()
 
-def build_cal_matrices(results, backend, pairs, k=5):
+    r_list = [results.get_counts(i) for i in range(len(results.results))]
+    if probs is not None:
+        for i, r in enumerate(r_list):
+            r_list[i] = probs(r)
+
+    return r_list, pairs
+
+def build_cal_matrices(results, backend, pairs, k=5, probs=None):
     '''
         Given results and pairs build calibration matrices
     '''
@@ -129,14 +137,13 @@ def build_cal_matrices(results, backend, pairs, k=5):
 
     n_qubits = len(backend.properties().qubits)
     singles = list(range(n_qubits))
-    
-    r_list = [results.get_counts(i) for i in range(len(results.results))]
+
 
     n_single = 2 * len(singles)
     n_pairs = 4 * len(pairs)
 
     single_cals = {}
-    for targs, cal_res in zip(singles, list_fold(r_list[:n_single], 2)):
+    for targs, cal_res in zip(singles, list_fold(results[:n_single], 2)):
         res = np.zeros((2, 2), dtype=np.float32)
         for i, counts in enumerate(cal_res):
             c_vec = np.zeros(2, dtype=np.float32)
@@ -148,7 +155,7 @@ def build_cal_matrices(results, backend, pairs, k=5):
         single_cals[str(targs)] = res
 
     pair_cals = {}
-    for targs, cal_res in zip(pairs, list_fold(r_list[n_single:], 4)):
+    for targs, cal_res in zip(pairs, list_fold(results[n_single:], 4)):
         res = np.zeros((4, 4), dtype=np.float32)
         for i, counts in enumerate(cal_res):
             c_vec = np.zeros(4, dtype=np.float32)

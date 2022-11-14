@@ -11,7 +11,7 @@ def qiskit_full(backend, n_qubits, n_shots, probs=None, verbose=False):
     t_qc = qiskit.transpile(meas_calibs, backend)
     cal_results = qiskit.execute(t_qc, backend, shots=n_shots_qiskit_full).result()
     if probs is not None:
-        cal_res_measurement_error(cal_results, probs)
+        cal_res_measurement_error(cal_results, probs, n_qubits=n_qubits)
         
     meas_fitter = CompleteMeasFitter(cal_results, state_labels, circlabel='mcal')
     full_filter = meas_fitter.filter
@@ -29,13 +29,13 @@ def qiskit_linear(backend, n_qubits, n_shots, probs=None):
     t_qc = qiskit.transpile(meas_calibs, backend)
     cal_results = qiskit.execute(t_qc, backend, shots=n_shots).result()
     if probs is not None:
-        cal_res_measurement_error(cal_results, probs)
+        cal_res_measurement_error(cal_results, probs, n_qubits=n_qubits)
     
     meas_fitter = TensoredMeasFitter(cal_results, state_labels, circlabel='mcal')
     linear_fitter = meas_fitter.filter
     return linear_fitter
 
-def cal_res_measurement_error(cal_results, probs, n_qubits=4):
+def cal_res_measurement_error(cal_results, probs, n_qubits):
     for i, res in enumerate(cal_results.results):
         counts = {}
         cd = res.data.to_dict()['counts']
