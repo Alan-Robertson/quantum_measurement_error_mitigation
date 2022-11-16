@@ -53,7 +53,7 @@ def jigsaw(circuit, backend, n_shots,
         probs=probs,
         n_qubits=n_qubits)
 
-    for table, pair in zip(local_pmf_tables, local_pmf_pairs[::-1]):
+    for table, pair in zip(local_pmf_tables, local_pmf_pairs):
         global_pmf_table = convolve(global_pmf_table, table, pair, norm_fix=norm_fix)
 
     return global_pmf_table
@@ -145,9 +145,22 @@ def convolve(global_pmf_table, local_table, local_pair, norm_fix=False):
     for idx in split_table:
         subtable = split_table[idx]
         for jdx in subtable:
-            table_idx = jdx
-            for i, pos in enumerate(local_pair):
-                table_idx = table_idx[:pos] + idx[i] + table_idx[pos:]
+            
+            table_idx = [None] * (len(jdx) + len(idx))
+            
+            i = 0
+            j = 0
+            k = 0
+            while k < len(table_idx):
+                if k in local_pair:
+                    table_idx[k] = idx[local_pair.index(k)]
+                    i += 1
+                else:
+                    table_idx[k] = jdx[j]
+                    j += 1   
+                k += 1
+            table_idx = ''.join(table_idx )
+            
             joint_table[table_idx] = subtable[jdx]
 
     # Normalise the final table
