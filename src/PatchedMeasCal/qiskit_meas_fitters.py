@@ -41,7 +41,9 @@ def cal_res_measurement_error(cal_results, probs, n_qubits):
         cd = res.data.to_dict()['counts']
         for key in cd:
             counts[bin(int(key, 16))[2:].zfill(n_qubits)] = cd[key]
-        counts = probs(counts)
+
+        if probs is not None:
+            counts = probs(counts)
 
         data_counts = {}
         for key in counts:

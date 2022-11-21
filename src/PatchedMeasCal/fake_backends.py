@@ -231,9 +231,9 @@ class Hexagonal16(FakeBackendWrapper):
         [10, 11], [11, 10],
         [11, 12], [12, 11],
         [12, 9], [9, 12],
-        [0, 13], [14, 0],
+        [0, 13], #[14, 0],
         [13, 14], [15, 14],
-        [14, 15], [15, 1],
+        [14, 15], #[15, 1],
         [15, 6], [6, 15]
     ]
 
@@ -261,37 +261,7 @@ class LocalSimulator(ErrorFreeLocalSim):
     @staticmethod
     def gen_coupling_map(n_qubits):
         return [[i, j] for i in range(n_qubits) for j in range(n_qubits) if i != j] 
-# class Hexagonal16(FakeBackendWrapper):
-#     """A fake 16 qubit fully connected backend."""
 
-#     def __init__(self):
-#         self.n_qubits = 16
-#         self._coupling_map = self.gen_coupling_map()
-#         super().__init__("hex", self.n_qubits, self._coupling_map)
-
-    
-#     def gen_coupling_map(self):
-#         return [
-#         [0, 1], [1, 0],
-#         [0, 2], [2, 0],
-#         [1, 3], [3, 1],
-#         [2, 4], [4, 2],
-#         [4, 5], [5, 4],
-#         [3, 5], [5, 3],
-#         [3, 13], [13, 3],
-#         [13, 14], [14, 13],
-#         [14, 15], [15, 14],
-#         [10, 15], [15, 10],
-#         [10, 5], [5, 10],
-#         [10, 12], [12, 10],
-#         [11, 12], [12, 11],
-#         [9, 11], [11, 9],
-#         [9, 4], [4, 9],
-#         [9, 8], [8, 9],
-#         [8, 7], [7, 8],
-#         [7, 6], [6, 7],
-#         [6, 2], [2, 6],
-#     ]
 
 class Hexagonal(FakeBackendWrapper):
     """A fake Hexagonal backend."""

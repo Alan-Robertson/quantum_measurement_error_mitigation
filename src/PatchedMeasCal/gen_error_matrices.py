@@ -113,7 +113,7 @@ class FakeMeasurementError():
                     n_edges = 0
                     n_err = sum(np.abs(diff_str))
                     for i, v_i in enumerate(diff_str):
-                        for j, v_j in  enumerate(diff_str):
+                        for j, v_j in enumerate(diff_str):
                             if i != j and v_i != 0 and v_j != 0:
                                 if [i, j] in coupling_map:
                                     n_edges += 1
