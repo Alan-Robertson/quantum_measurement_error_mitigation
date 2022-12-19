@@ -30,6 +30,12 @@ def norm_results_dict(results):
     for i in results: 
         results[i] /= norm_val
 
+def rev_results_dict(results):
+    r_results = {}
+    for r in results:
+        r_results[r[::-1]] = results[r]
+    return r_results
+
 def dict_distance(noise_free_results, error_prone_results):
     noise_free_results = copy.deepcopy(noise_free_results)
     error_results = copy.deepcopy(error_prone_results)

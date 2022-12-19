@@ -5,7 +5,7 @@ from functools import partial
 
 from PatchedMeasCal.edge_bfs import CouplingMapGraph
 from PatchedMeasCal.inv_measure_methods import strip_measurement
-from PatchedMeasCal.utils import norm_results_dict
+from PatchedMeasCal.utils import norm_results_dict, rev_results_dict
 
 def jigsaw(circuit, backend, n_shots, 
     verbose=False,  # Verbosity
@@ -41,13 +41,13 @@ def jigsaw(circuit, backend, n_shots,
         n_shots_pmfs = n_shots
 
     # Because qiskit stores results strings backwards, the index ordering is reversed
-    local_pmf_pairs_index = [[(n_qubits - i) % n_qubits, (n_qubits - j) % n_qubits] for i, j in local_pmf_pairs]
+    local_pmf_pairs_index = [[(n_qubits - i - 1), (n_qubits - j - 1)] for i, j in local_pmf_pairs]
 
     local_pmf_circs = [build_local_pmf_circuit(circuit, backend, pairs, n_qubits=n_qubits) for pairs in local_pmf_pairs]
 
     local_pmf_tables = build_local_pmf_tables(
         local_pmf_circs,
-        local_pmf_pairs,
+        local_pmf_pairs_index,
         backend,
         n_shots_pmfs,
         probs=probs,
@@ -56,6 +56,7 @@ def jigsaw(circuit, backend, n_shots,
     for table, pair in zip(local_pmf_tables, local_pmf_pairs):
         global_pmf_table = convolve(global_pmf_table, table, pair, norm_fix=norm_fix)
 
+    global_pmf_table = rev_results_dict(global_pmf_table)
     return global_pmf_table
 
 
@@ -94,6 +95,9 @@ def build_local_pmf_tables(circs, pairs, backend, n_shots, probs=None, n_qubits=
             local_pmf_tables[i] = pair_probs(local_pmf_tables[i])
         norm_results_dict(local_pmf_tables[i])
 
+    for i, table in enumerate(local_pmf_tables):
+        local_pmf_tables[i] = rev_results_dict(table)
+
     return local_pmf_tables
 
 def build_global_pmf(circuit, backend, n_shots, probs=None, n_qubits=None):
@@ -108,6 +112,7 @@ def build_global_pmf(circuit, backend, n_shots, probs=None, n_qubits=None):
         res = probs(res)
 
     norm_results_dict(res)
+    res = rev_results_dict(res)
     return res
 
 
@@ -127,11 +132,13 @@ def convolve(global_pmf_table, local_table, local_pair, norm_fix=False):
     for idx in split_table:
         subtable = split_table[idx]
         norm_val = sum(subtable.values())
+
         for jdx in subtable:
             if norm_fix and subtable[jdx] < norm_val: # Resolves issue of single element entries norming to 1
                 subtable[jdx] /= norm_val 
             elif not norm_fix:
-                subtable[jdx] /= norm_val 
+                subtable[jdx] /= norm_val
+
             if idx in local_table: # This can happen
                 if local_table[idx] == 1: # This can also happen, we're just avoiding a div 0 here
                     local_table[idx] == 0.9999

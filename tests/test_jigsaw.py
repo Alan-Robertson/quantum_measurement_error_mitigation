@@ -33,6 +33,8 @@ class StatePrepTest(pyunit.TestCase):
         '''
         Testing Bayes update using tables from the paper
         '''
+        eps = 0.05
+
         global_pmf_table = {
         '000':0.1,
         '001':0.10,
@@ -65,7 +67,7 @@ class StatePrepTest(pyunit.TestCase):
             expected_table[i] /= norm_val
 
         for i in expected_table:
-            assert(abs(expected_table[i] - updated_table[i]) < 0.05)
+            assert(abs(expected_table[i] - updated_table[i]) < eps)
 
             
 
