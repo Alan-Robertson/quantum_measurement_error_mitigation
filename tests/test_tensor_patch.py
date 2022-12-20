@@ -32,19 +32,11 @@ class TensorPatchTest(pyunit.TestCase):
         results_vec = {'1111':10, '0001':12}
         tpf.apply(results_vec, participating_qubits=[0, 1, 2, 3])
 
-    # def test_large(self):
-    #     backend = FakeTokyo()
-    #     tpf = TensorPatchFitter(backend)
-    #     tpf.build()
+     def test_large(self):
+         backend = FakeTokyo()
+         tpf = TensorPatchFitter(backend)
+         tpf.build()
 
-    #     results_vec = {'11111':10, '00001':12}
-    #     tpf.apply(results_vec)
+         results_vec = {'11111':10, '00001':12}
+         tpf.apply(results_vec)
 
-
-
-        
-
-
-
-        
-    
