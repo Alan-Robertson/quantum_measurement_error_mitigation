@@ -23,7 +23,7 @@ class GraphNode():
 
     def add_edge(self, graph_node):
         '''
-            Ads an edge to the Node
+            Adds an edge to the Node
         '''
         self.adjacent_nodes.add(graph_node)
         self.n_edges += 1
@@ -183,3 +183,100 @@ class CouplingMapGraph():
                 boundary.remove(node)
 
         return boundary
+
+
+def cmap_djikstra(cmap, n_qubits, root = 0):
+        
+    distances = [{i:0} for i in range(n_qubits)]
+    
+    cmap = copy.deepcopy(cmap)
+    traversed = [root]
+    edges_used = []
+    nodes_found = []
+    
+    for c in cmap:
+        distances[c[0]][c[1]] = 1
+    
+    while len(cmap) > 0:
+        for t in traversed:
+            for c in cmap:
+                if c[0] == t:
+                    edges_used.append(c)
+                    nodes_found.append(c[1])
+
+                    # Join
+                    distances_t = distances[t]
+                    distances_e = distances[c[1]]
+                    for d_t in distances_t:
+                        if d_t not in distances_e:
+                            distances_e[d_t] = distances_t[d_t] + 1
+                        else:
+                            distances_e[d_t] = min(distances_e[d_t], distances_t[d_t] + 1)
+                            distances_t[d_t] = min(distances_e[d_t] + 1, distances_t[d_t])
+        traversed = nodes_found
+        nodes_found = []
+        
+        for e in edges_used:
+            if e in cmap:
+                cmap.remove(e)
+            if e[::-1] in cmap:
+                cmap.remove(e[::-1])
+        edges_used = []
+            
+    # Symmetric Cleanup
+    for i, d in enumerate(distances):
+        for j in range(n_qubits):
+            if j not in d and i in distances[j]:
+                d[j] = distances[j][i]
+            if j not in d and i not in distances[j]:   
+                #Grown at the same time, hence not present in either
+                dist = float('inf')
+                if i not in distances[j]:
+                    for k in distances[j]:
+                        if i in distances[k] and j != k:
+                            dist = min(dist, distances[j][k] + distances[k][i])
+                distances[i][j] = dist
+                distances[j][i] = dist
+
+    return distances
+
+def djikstra_tree(coupling_map, n_qubits, root = 0):
+    traversed = []
+    front_nodes = [root]
+
+    tree_cmap = []
+    coupling_map = copy.deepcopy(coupling_map)
+
+
+    while len(traversed) < n_qubits:
+        next_front = []
+        for t in front_nodes:
+            for c in coupling_map:
+                if c[0] == t:
+                    if c[1] not in traversed and c[1] not in front_nodes and c[1] not in next_front:
+                        next_front.append(c[1])
+                        tree_cmap.append(c)
+                        tree_cmap.append(c[::-1])
+                        coupling_map.remove(c)
+                        coupling_map.remove(c[::-1])
+
+        traversed += front_nodes
+        front_nodes = next_front
+
+    return tree_cmap
+
+# This would be much faster with a proper graph structure
+def cmap_shortest_path(start, end, distance_map, cmap):
+    distance = distance_map[start][end]
+    path = [start]
+    curr_node = start
+    while curr_node != end:
+        next_node = None
+        for i in distance_map[curr_node]:
+            if [curr_node, i] in cmap or [i, curr_node] in cmap:
+                if distance_map[i][end] == distance_map[curr_node][end] - 1:
+                    next_node = i
+                    break
+        path.append(next_node)
+        curr_node = next_node
+    return path
