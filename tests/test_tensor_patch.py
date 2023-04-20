@@ -24,7 +24,7 @@ class TensorPatchTest(pyunit.TestCase):
         results_vec = {'11111':10, '00001':12}
         tpf.apply(results_vec)
 
-    def test_partial(self):
+   def test_partial(self):
         backend = FakeVigo()
         tpf = TensorPatchFitter(backend)
         tpf.build()

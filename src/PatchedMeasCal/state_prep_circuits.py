@@ -92,10 +92,9 @@ def equal_superposition_state_prep(backend):
 
 def equal_superposition_state_dist(results:dict, *args, **kwargs):
     n_qubits = len(results.keys().__iter__().__next__())
-    n_elements = 2 ** n_qubits
-    vec = res_to_vec(results)
-    target_vec = np.ones(n_elements) / n_elements
-    dist = np.sum(np.abs(vec - target_vec))
+    vec = np.array(list(results.values())) / sum(list(results.values()))
+    target_val = 1 / (2 ** n_qubits) 
+    dist = np.sum(np.abs(vec - target_val))
     return dist
 
 def integer_state_prep(backend, int_val):
