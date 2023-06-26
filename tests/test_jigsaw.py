@@ -1,7 +1,7 @@
 import unittest as pyunit
 
 from PatchedMeasCal import jigsaw
-from PatchedMeasCal.benchmarks import bv
+from PatchedMeasCal import bv
 from PatchedMeasCal.fake_backends import Grid
 from PatchedMeasCal.utils import norm_results_dict
 
