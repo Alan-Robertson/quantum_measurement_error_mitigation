@@ -16,6 +16,7 @@ pip install -r requirements.txt
 python setup.py install
 ```
 Some of the examples may make use of [QiskitPool](https://github.com/Alan-Robertson/QiskitPool)
+To use MThree with the simulated errors from this codebase please use the fork [here](https://github.com/Alan-Robertson/mthree)
 
 ### Usage
 See the examples directory, or the tests for some examples of using this package.
